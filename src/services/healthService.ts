@@ -1,10 +1,25 @@
 import { Env } from '../config/types/common';
 import { HealthStatus, UserCreationResult, DebugInfo } from '../config/types/health';
 import { HealthRepository } from '../repositories/healthRepository';
+import { healthCheck } from '../config/db';
 
 export class HealthService {
   static async checkHealth(env: Env): Promise<HealthStatus> {
     try {
+      // CRÍTICO: Health check do banco de dados primeiro
+      const dbHealth = await healthCheck(env);
+      
+      if (dbHealth.status === 'unhealthy') {
+        return {
+          status: 'error',
+          message: 'Database connection failed',
+          error: dbHealth.error,
+          timestamp: new Date().toISOString(),
+          database: dbHealth.connectionType,
+          connection: 'failed',
+        };
+      }
+
       const repository = new HealthRepository(env);
       const userCount = await repository.getUserCount();
       const databaseType = repository.getDatabaseType();

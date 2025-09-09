@@ -1,20 +1,25 @@
-import { pgTable, serial, text, timestamp, integer, boolean } from 'drizzle-orm/pg-core';
+import { pgTable, text, timestamp, integer, boolean, primaryKey, unique } from 'drizzle-orm/pg-core';
+import { generateId } from '../../lib/cuid';
 
 // Users table (using pgTable for public schema by default)
 export const users = pgTable('users', {
-  id: serial('id').primaryKey(),
+  id: text('id').primaryKey().$defaultFn(() => generateId()),
   email: text('email').notNull().unique(),
   name: text('name'),
   role: text('role').notNull().default('user'),
-  brandId: integer('brandId'),
+  brandId: text('brandId'),
   brandName: text('brandName'),
-  createdAt: timestamp('createdAt', { withTimezone: true }).notNull(),
-  updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull(),
-});
+  createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  // Controle explícito de nomes de tabelas
+  usersPkey: primaryKey({ columns: [table.id] }),
+  usersEmailKey: unique('users_email_key').on(table.email),
+}));
 
 // Subscribers table
 export const subscribers = pgTable('subscribers', {
-  id: serial('id').primaryKey(),
+  id: text('id').primaryKey().$defaultFn(() => generateId()),
   email: text('email').notNull().unique(),
   name: text('name'),
   status: text('status').notNull().default('active'),
@@ -26,7 +31,7 @@ export const subscribers = pgTable('subscribers', {
 
 // Tickets table
 export const tickets = pgTable('tickets', {
-  id: serial('id').primaryKey(),
+  id: text('id').primaryKey().$defaultFn(() => generateId()),
   title: text('title').notNull(),
   description: text('description'),
   status: text('status').notNull().default('open'),
@@ -39,7 +44,7 @@ export const tickets = pgTable('tickets', {
 
 // Acquisitions table
 export const acquisitions = pgTable('acquisitions', {
-  id: text('id').primaryKey(),
+  id: text('id').primaryKey().$defaultFn(() => generateId()),
   subscriberId: text('subscriberId').notNull(),
   automationId: text('automationId'),
   journeyId: text('journeyId'),
@@ -51,7 +56,7 @@ export const acquisitions = pgTable('acquisitions', {
 
 // URL Tracking table
 export const urlTracking = pgTable('url_tracking', {
-  id: text('id').primaryKey(),
+  id: text('id').primaryKey().$defaultFn(() => generateId()),
   originalUrl: text('originalUrl').notNull(),
   shortCode: text('shortCode').notNull().unique(),
   clicks: integer('clicks').notNull().default(0),

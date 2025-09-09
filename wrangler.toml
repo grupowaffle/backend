@@ -1,4 +1,4 @@
-name = "cfw-thenews"
+name = "backend"
 account_id = "1c8bd48a67e737cf8de1c2d03e086cee"
 main = "src/index.ts"
 compatibility_date = "2024-09-23"

@@ -17,10 +17,3 @@ JWT_SECRET = "3c40a9b50a922f056dca550b6d34bbee9e034a10813f226aed7da7de7074dc07"
 JWT_USERS = "6503bfe7de7dabfbb4539de5cd66ceb2a014f3f19170243da05461dd6f0e6621"
 DATABASE_URL = "postgresql://neondb_owner:npg_fg75WYZaMRbJ@ep-icy-bird-acnihtn0-pooler.sa-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
 NEON_PROD = "postgresql://neondb_owner:npg_fg75WYZaMRbJ@ep-mute-grass-ac2o5iah-pooler.sa-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
-
-# D1 Database binding
-[[d1_databases]]
-binding = "DB"
-database_name = "thenews-db"
-database_id = "your-d1-database-id"
-preview_database_id = "your-d1-preview-database-id"

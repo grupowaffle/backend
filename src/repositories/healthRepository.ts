@@ -31,7 +31,7 @@ export class HealthRepository {
 
     const [user] = await db.insert(users).values(newUserData).returning();
     return {
-      id: user.id,
+      id: parseInt(user.id),
       name: user.name || "Test User",
       email: user.email,
       role: user.role,

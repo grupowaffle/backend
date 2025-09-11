@@ -45,7 +45,13 @@ export interface Env {
   FIREBASE_CLIENT_EMAIL: string;
   FIREBASE_PRIVATE_KEY: string;
   JWT_USERS: string;
-  MASTER_PASSWORD?: string; // Senha mestra para acesso privilegiado
+  MASTER_PASSWORD: string; // Senha mestra para acesso privilegiado
+  
+  // Cloudflare D1 REST API
+  CLOUDFLARE_ACCOUNT_ID: string;
+  CLOUDFLARE_D1_DATABASE_ID: string;
+  CLOUDFLARE_API_TOKEN: string;
+  DEV_TOKEN: string;
   // Configurações de servidores
   HOME_SERVER: string;
   REFERRALS_SERVER: string;
@@ -73,8 +79,9 @@ export interface UserData {
   email: string;
   role: string;
   brand_name: string;
-  brandId: number;
+  brandId: number | string; // Pode ser string para IDs especiais como 'master'
   permissions: string[];
+  roles?: string[]; // Array de roles do usuário
 }
 
 export interface CustomJWTPayload {

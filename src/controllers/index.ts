@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { ultraCacheMiddleware } from '../middlewares/ultraCacheMiddleware';
 import { healthRoutes } from './routes/health';
+import { authRoutes } from './routes/auth';
 
 // Tipos e handlers
 import { Env, UserData } from '../config/types/common';
@@ -20,6 +21,7 @@ export type AppType = Hono<{
 
 /**
  * Cria e configura uma nova instância da aplicação Hono ULTRA-OTIMIZADA
+ * @param {Env} env - Objeto contendo as variáveis de ambiente
  * @returns {AppType} Instância configurada da aplicação Hono
  */
 export function createApp(_env: Env): AppType {
@@ -34,14 +36,7 @@ export function createApp(_env: Env): AppType {
   app.use('*', ultraCacheMiddleware);
 
   app.route('/health', healthRoutes());
-
-  // TODO: Implementar rotas protegidas quando necessário
-  // const secured = new Hono<{
-  //   Bindings: Env;
-  //   Variables: {
-  //     user: UserData;
-  //   };
-  // }>();
+  app.route('/auth', authRoutes());
 
   return app;
 }

@@ -1,12 +1,16 @@
 import { Hono } from 'hono';
-import { Env } from '../../config/types/common';
+import { Env, UserData } from '../../config/types/common';
 import { HealthHandlers } from '../handlers/healthHandlers';
+import { roleMiddleware } from '../../middlewares/auth';
 
 /**
  * Tipo que define a estrutura do router de health check
  */
 type HealthRouter = Hono<{
   Bindings: Env;
+  Variables: {
+    user: UserData;
+  };
 }>;
 
 /**
@@ -16,6 +20,9 @@ type HealthRouter = Hono<{
 export function healthRoutes(): HealthRouter {
   const router = new Hono<{
     Bindings: Env;
+    Variables: {
+      user: UserData;
+    };
   }>();
 
   /**
@@ -32,7 +39,7 @@ export function healthRoutes(): HealthRouter {
   /**
    * Rota para debug das variáveis de ambiente
    */
-  router.get('/debug', HealthHandlers.getDebugInfo);
+  router.get('/debug', roleMiddleware(['admin']), HealthHandlers.getDebugInfo);
 
   return router;
 }

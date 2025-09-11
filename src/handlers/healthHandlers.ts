@@ -1,6 +1,6 @@
 import { Context } from 'hono';
-import { Env } from '../../config/types/common';
-import { HealthService } from '../../services/healthService';
+import { Env } from '../config/types/common';
+import { HealthService } from '../services/healthService';
 
 export class HealthHandlers {
   static async getHealth(c: Context) {

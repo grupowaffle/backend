@@ -1,9 +1,9 @@
 import { Context } from 'hono';
 import { sign } from 'hono/jwt';
-import { Env, UserData } from '../../config/types/common';
-import { CloudflareD1Client } from '../../lib/cloudflareD1Client';
-import { AuthenticationHandler } from '../../handlers/AuthenticationHandler';
-import { LoginRequest, LoginResponse, RegisterRequest, RegisterResponse, ProfileResponse } from '../../config/types/auth';
+import { Env, UserData } from '../config/types/common';
+import { CloudflareD1Client } from '../lib/cloudflareD1Client';
+import { AuthService } from '../services/authService';
+import { LoginRequest, LoginResponse, RegisterRequest, RegisterResponse, ProfileResponse } from '../config/types/auth';
 
 /**
  * Classe responsável por lidar com as operações de autenticação e perfil de usuário.
@@ -42,7 +42,7 @@ export class AuthHandlers {
 
       const env = c.env;
       const d1Client = AuthHandlers.createD1Client(env);
-      const authHandler = new AuthenticationHandler(d1Client);
+      const authHandler = new AuthService(d1Client);
 
       const result = await authHandler.login({ email, password });
 
@@ -104,7 +104,7 @@ export class AuthHandlers {
 
       const env = c.env;
       const d1Client = AuthHandlers.createD1Client(env);
-      const authHandler = new AuthenticationHandler(d1Client);
+      const authHandler = new AuthService(d1Client);
 
       const user = await authHandler.register({
         email,
@@ -225,7 +225,7 @@ export class AuthHandlers {
       const token = authHeader.substring(7);
       const env = c.env;
       const d1Client = AuthHandlers.createD1Client(env);
-      const authHandler = new AuthenticationHandler(d1Client);
+      const authHandler = new AuthService(d1Client);
 
       await authHandler.logout(token);
 
@@ -270,7 +270,7 @@ export class AuthHandlers {
 
       const env = c.env;
       const d1Client = AuthHandlers.createD1Client(env);
-      const authHandler = new AuthenticationHandler(d1Client);
+      const authHandler = new AuthService(d1Client);
 
       const expiry = expiresAt ? new Date(expiresAt) : undefined;
       const success = await authHandler.assignUserRole(userId, role, expiry);

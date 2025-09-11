@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { Env, UserData } from '../../config/types/common';
-import { HealthHandlers } from '../handlers/healthHandlers';
+import { HealthHandlers } from '../../handlers/healthHandlers';
 import { roleMiddleware, authMiddleware } from '../../middlewares/auth';
 
 /**

@@ -25,17 +25,11 @@ export function createDrizzleClient(env: DatabaseEnv) {
       throw new Error('DATABASE_URL ou NEON_URL deve estar configurada');
     }
 
-    // CRÍTICO: Verificar se é string de pooler para Workers
-    if (!databaseUrl.includes('pooler')) {
-      console.warn('⚠️  CRÍTICO: Usando endpoint direto em vez de pooler. Workers precisam de pooler!');
-    }
-
     // CRÍTICO: Reutilizar cliente existente ou criar novo (evita múltiplas conexões)
     if (!globalThis.__drizzle || !globalThis.__drizzle_created) {
       const sql = neon(databaseUrl, {
         arrayMode: false,
-        fullResults: false,
-        fetchConnectionCache: true, // CRÍTICO para Workers
+        fullResults: false
       });
       
       globalThis.__drizzle = drizzle(sql, { 

@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { Env, UserData } from '../../config/types/common';
-import { authV2Middleware, roleMiddleware } from '../../middlewares/auth';
-import { AuthHandlers } from '../handlers/authHandlers';
+import { authMiddleware, roleMiddleware } from '../../middlewares/auth';
+import { AuthHandlers } from '../../handlers/authHandlers';
 
 export type AuthAppType = Hono<{
   Bindings: Env;
@@ -57,7 +57,7 @@ export function authRoutes() {
   });
 
   // Create protected routes that require authentication
-  const secured = app.use('*', authV2Middleware);
+  const secured = app.use('*', authMiddleware);
 
   // User profile
   secured.get('/user', AuthHandlers.profileHandler);

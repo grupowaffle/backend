@@ -1,7 +1,7 @@
 import { Context, Next } from 'hono';
 import { verify } from 'hono/jwt';
 import { Env, UserData } from '../config/types/common';
-import { AuthenticationHandler } from '../handlers/AuthenticationHandler';
+import { AuthService } from '../services/authService';
 import { CloudflareD1Client } from '../lib/cloudflareD1Client';
 import { JWTPayload } from '../config/types/auth';
 
@@ -115,7 +115,7 @@ export const authMiddleware = async (
         apiToken: env.CLOUDFLARE_API_TOKEN,
       });
 
-      const authHandler = new AuthenticationHandler(d1Client);
+      const authHandler = new AuthService(d1Client);
       const sessionUser = await authHandler.validateSession(payload.sessionToken);
 
       if (!sessionUser) {
@@ -142,7 +142,7 @@ export const authMiddleware = async (
         apiToken: env.CLOUDFLARE_API_TOKEN,
       });
 
-      const authHandler = new AuthenticationHandler(d1Client);
+      const authHandler = new AuthService(d1Client);
       const sessionUser = await authHandler.validateSession(token);
 
       if (sessionUser) {

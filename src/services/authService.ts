@@ -3,13 +3,13 @@ import { LoginCredentials, RegisterData } from '../config/types/auth';
 import { UserData } from '../config/types/common';
 
 /**
- * Handler de autenticação responsável por gerenciar sessões, login, registro e papéis de usuários.
+ * Serviço de autenticação responsável por gerenciar sessões, login, registro e papéis de usuários.
  */
-export class AuthenticationHandler {
+export class AuthService {
   private d1Client: CloudflareD1Client;
 
   /**
-   * Cria uma instância do handler de autenticação.
+   * Cria uma instância do serviço de autenticação.
    * @param d1Client Instância do cliente Cloudflare D1 para operações no banco de dados.
    */
   constructor(d1Client: CloudflareD1Client) {

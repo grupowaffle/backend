@@ -12,13 +12,6 @@ enabled = true
 [triggers]
 crons = ["0 7 * * *"]
 
+# Variáveis não-sensíveis podem ficar aqui
 [vars]
-JWT_SECRET = "6503bfe7de7dabfbb4539de5cd66ceb2a014f3f19170243da05461dd6f0e6621"
-JWT_USERS = "6503bfe7de7dabfbb4539de5cd66ceb2a014f3f19170243da05461dd6f0e6621"
-DATABASE_URL = "postgresql://neondb_owner:npg_fg75WYZaMRbJ@ep-icy-bird-acnihtn0-pooler.sa-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
-NEON_PROD = "postgresql://neondb_owner:npg_fg75WYZaMRbJ@ep-mute-grass-ac2o5iah-pooler.sa-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
-CLOUDFLARE_ACCOUNT_ID="1109050cccf2d354d12533657d42c5c6"
-CLOUDFLARE_D1_DATABASE_ID="75bbd472-b2e2-48a7-8e5d-387e4ed11d3c"
-CLOUDFLARE_API_TOKEN="4DNq-9FOvuDRRWVMLStf4Q8lNtkW7zLQVbjX-ZRW"
-MASTER_PASSWORD="waffle_master_2025_secure_!@#2025$%_QwErTyUiOp1234567890"
-DEV_TOKEN="dev-token-local-only"
+NODE_ENV = "production"

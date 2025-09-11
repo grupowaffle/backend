@@ -3,3 +3,16 @@
 /drizzle
 /.wrangler
 /.claude
+
+# Environment variables
+.env
+.env.local
+.env.production
+.dev.vars
+wrangler.toml.backup
+
+# macOS
+.DS_Store
+
+# Logs
+*.log

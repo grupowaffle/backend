@@ -29,7 +29,7 @@ export function validationMiddleware(schemas: ValidationOptions) {
 
       // Validar query params se schema fornecido
       if (schemas.query) {
-        const query = Object.fromEntries(c.req.query());
+        const query = c.req.query();
         const validatedQuery = schemas.query.parse(query);
         c.set('validatedQuery', validatedQuery);
       }
@@ -45,7 +45,7 @@ export function validationMiddleware(schemas: ValidationOptions) {
     } catch (error) {
       if (error instanceof z.ZodError) {
         // Retornar erros de validação estruturados
-        const validationErrors = error.errors.map(err => ({
+        const validationErrors = error.issues.map(err => ({
           field: err.path.join('.'),
           message: err.message,
           code: err.code,

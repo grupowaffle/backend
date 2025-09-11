@@ -25,7 +25,7 @@ declare module 'hono' {
  * @param c Contexto do Hono
  * @param next Próxima função do middleware
  */
-export const authV2Middleware = async (
+export const authMiddleware = async (
   c: Context<{ Bindings: Env; Variables: { user: UserData; isMasterAccess: boolean } }>,
   next: Next
 ) => {

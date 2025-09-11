@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { Env, UserData } from '../../config/types/common';
 import { HealthHandlers } from '../handlers/healthHandlers';
-import { roleMiddleware } from '../../middlewares/auth';
+import { roleMiddleware, authMiddleware } from '../../middlewares/auth';
 
 /**
  * Tipo que define a estrutura do router de health check
@@ -32,14 +32,9 @@ export function healthRoutes(): HealthRouter {
   router.get('/', HealthHandlers.getHealth);
 
   /**
-   * Rota para testar criação de usuário (como no exemplo)
-   */
-  router.get('/test-user', HealthHandlers.createTestUser);
-
-  /**
    * Rota para debug das variáveis de ambiente
    */
-  router.get('/debug', roleMiddleware(['admin']), HealthHandlers.getDebugInfo);
+  router.get('/debug', authMiddleware, roleMiddleware(['admin']), HealthHandlers.getDebugInfo);
 
   return router;
 }

@@ -1,6 +1,7 @@
 import { Context, Next } from 'hono';
 import { Env } from '../config/types/common';
 import { CacheService } from '../services/CacheService'; 
+import { KVNamespace } from '@cloudflare/workers-types';
 
 /**
  * Middleware ULTRA-OTIMIZADO para cache de requisições
@@ -63,7 +64,7 @@ export const ultraCacheMiddleware = async (c: Context<{ Bindings: Env }>, next: 
 
     // 2. Verifica cache KV com timeout (< 50ms)
     const kvData = await Promise.race([
-      getFromKVCache(c.env.CACHE, cacheKey),
+      getFromKVCache(c.env.CACHE as KVNamespace, cacheKey),
       new Promise<null>(resolve => setTimeout(() => resolve(null), 50))
     ]);
 
@@ -210,7 +211,7 @@ export const cacheInvalidationMiddleware = async (c: Context<{ Bindings: Env }>,
 
         // Invalida também no KV
         await Promise.allSettled(
-          keysToInvalidate.map(key => c.env.CACHE.delete(key))
+          keysToInvalidate.map(key => c.env.CACHE.delete(key as string))
         );
       } catch (error) {
         // Silenciosamente falha

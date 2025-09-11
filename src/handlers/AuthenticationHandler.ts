@@ -24,10 +24,10 @@ export class AuthenticationHandler {
   async validateSession(sessionToken: string): Promise<UserData | null> {
     try {
       const result = await this.d1Client.query(
-        `SELECT s.*, u.id as user_id, u.email, u.brand_name, u.role, u.brand_id, u.permissions, u.roles
-         FROM sessions s 
+        `SELECT s.*, u.id as user_id, u.email, u.display_name, u.username
+         FROM user_sessions s 
          JOIN users u ON s.user_id = u.id 
-         WHERE s.session_token = ? AND s.expires_at > datetime('now')`,
+         WHERE s.id = ? AND s.expires_at > datetime('now')`,
         [sessionToken]
       );
 
@@ -36,14 +36,43 @@ export class AuthenticationHandler {
       }
 
       const session = result.result.results[0];
+      
+      // Busca os roles e permissions do usuário
+      const rolesResult = await this.d1Client.query(
+        `SELECT r.name, r.permissions 
+         FROM user_roles ur 
+         JOIN roles r ON ur.role_id = r.id 
+         WHERE ur.user_id = ? AND ur.is_active = TRUE`,
+        [session.user_id]
+      );
+
+      let roles: string[] = [];
+      let permissions: string[] = [];
+      
+      if (rolesResult.success && rolesResult.result?.results?.length) {
+        rolesResult.result.results.forEach((role: any) => {
+          roles.push(role.name);
+          if (role.permissions) {
+            try {
+              const rolePerms = JSON.parse(role.permissions);
+              if (Array.isArray(rolePerms)) {
+                permissions.push(...rolePerms);
+              }
+            } catch {
+              // Ignore parsing errors
+            }
+          }
+        });
+      }
+
       return {
         id: session.user_id,
         email: session.email,
-        role: session.role,
-        brand_name: session.brand_name,
-        brandId: session.brand_id,
-        permissions: session.permissions ? JSON.parse(session.permissions) : [],
-        roles: session.roles ? JSON.parse(session.roles) : []
+        role: roles.length > 0 ? roles[0] : 'user',
+        brand_name: session.display_name || session.username || session.email.split('@')[0],
+        brandId: session.user_id,
+        permissions: [...new Set(permissions)], // Remove duplicates
+        roles: roles
       };
     } catch (error) {
       // Em caso de erro, retorna null para indicar sessão inválida
@@ -100,7 +129,7 @@ export class AuthenticationHandler {
 
       // Cria a sessão no banco de dados
       await this.d1Client.execute(
-        `INSERT INTO sessions (session_token, user_id, expires_at) VALUES (?, ?, ?)`,
+        `INSERT INTO user_sessions (id, user_id, expires_at) VALUES (?, ?, ?)`,
         [sessionToken, user.id, expiresAt.toISOString()]
       );
 
@@ -326,7 +355,7 @@ export class AuthenticationHandler {
   async logout(sessionToken: string): Promise<boolean> {
     try {
       const result = await this.d1Client.execute(
-        'DELETE FROM sessions WHERE session_token = ?',
+        'DELETE FROM user_sessions WHERE id = ?',
         [sessionToken]
       );
       return result.success;

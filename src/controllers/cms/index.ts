@@ -8,8 +8,7 @@ import { TagController } from './TagController';
 import { WorkflowController } from './WorkflowController';
 import { NotificationController } from './NotificationController';
 import { DashboardController } from './DashboardController';
-import { FeaturedContentController } from './FeaturedContentController';
-import { FeaturedPositionsController } from './FeaturedPositionsController';
+// Removed FeaturedContentController - using articles API with isFeatured parameter instead
 import { UserController } from './UserController';
 import { TwoFactorController } from './TwoFactorController';
 import { InvitationController } from './InvitationController';
@@ -51,8 +50,7 @@ export function createCMSRoutes(env: Env) {
     const workflowController = new WorkflowController(env);
     const notificationController = new NotificationController(env);
     const dashboardController = new DashboardController(env);
-    const featuredContentController = new FeaturedContentController(env);
-    const featuredPositionsController = new FeaturedPositionsController(env);
+    // Removed featured controllers - using articles API with isFeatured parameter instead
     const userController = new UserController(env);
     const twoFactorController = new TwoFactorController(env);
     const invitationController = new InvitationController(env);
@@ -84,8 +82,7 @@ export function createCMSRoutes(env: Env) {
     cmsApp.route('/workflow', workflowController.getApp());
     cmsApp.route('/notifications', notificationController.getApp());
     cmsApp.route('/dashboard', dashboardController.getApp());
-    cmsApp.route('/featured', featuredContentController.getApp());
-    cmsApp.route('/featured-positions', featuredPositionsController.getApp());
+    // Removed featured routes - use /articles?isFeatured=true instead
     cmsApp.route('/users', userController.getApp());
     cmsApp.route('/2fa', twoFactorController.getApp());
     cmsApp.route('/invitations', invitationController.getApp());

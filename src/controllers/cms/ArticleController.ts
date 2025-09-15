@@ -40,6 +40,8 @@ const listArticlesSchema = z.object({
   source: z.enum(['manual', 'beehiiv']).optional(),
   newsletter: z.string().optional(),
   isFeatured: z.string().transform(val => val === 'true').optional(),
+  featuredPosition: z.string().transform(val => parseInt(val)).optional(),
+  featuredCategory: z.string().optional(),
   search: z.string().optional(),
   includeRelations: z.string().transform(val => val === 'true').default('false'),
 });
@@ -200,6 +202,8 @@ export class ArticleController {
           source: params.source,
           newsletter: params.newsletter,
           isFeatured: params.isFeatured,
+          featuredPosition: params.featuredPosition,
+          featuredCategory: params.featuredCategory,
           search: params.search,
         };
 

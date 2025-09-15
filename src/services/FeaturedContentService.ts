@@ -355,6 +355,11 @@ export class FeaturedContentService {
           orderBy = asc(featuredContent.priority);
       }
 
+      // Garantir que orderBy não seja undefined
+      if (!orderBy) {
+        orderBy = asc(featuredContent.priority);
+      }
+
       // Query principal
       const results = await this.db
         .select({
@@ -399,7 +404,7 @@ export class FeaturedContentService {
         .from(featuredContent)
         .leftJoin(articles, eq(featuredContent.articleId, articles.id))
         .leftJoin(categories, eq(featuredContent.categoryId, categories.id))
-        .where(whereClause)
+        .where(whereClause || undefined)
         .orderBy(orderBy)
         .limit(limit)
         .offset(offset);
@@ -409,7 +414,7 @@ export class FeaturedContentService {
         .select({ count: count() })
         .from(featuredContent)
         .leftJoin(articles, eq(featuredContent.articleId, articles.id))
-        .where(whereClause);
+        .where(whereClause || undefined);
 
       const items = results.map(row => this.mapRowToFeaturedItem(row));
 
@@ -427,6 +432,7 @@ export class FeaturedContentService {
 
     } catch (error) {
       console.error('Error listing featured content:', error);
+      const { limit = 20, offset = 0 } = query || {};
       return { items: [], total: 0, pagination: { limit, offset, total: 0, totalPages: 0, page: 1 } };
     }
   }

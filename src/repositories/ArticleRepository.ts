@@ -9,6 +9,8 @@ export interface ArticleFilters {
   source?: 'manual' | 'beehiiv';
   newsletter?: string;
   isFeatured?: boolean;
+  featuredPosition?: number;
+  featuredCategory?: string;
   publishedAfter?: Date;
   publishedBefore?: Date;
   search?: string;
@@ -354,6 +356,14 @@ export class ArticleRepository extends BaseRepository {
 
     if (filters.isFeatured !== undefined) {
       conditions.push(eq(articles.isFeatured, filters.isFeatured));
+    }
+
+    if (filters.featuredPosition !== undefined) {
+      conditions.push(eq(articles.featuredPosition, filters.featuredPosition));
+    }
+
+    if (filters.featuredCategory) {
+      conditions.push(eq(articles.featuredCategory, filters.featuredCategory));
     }
 
     if (filters.publishedAfter) {

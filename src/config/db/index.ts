@@ -34,7 +34,7 @@ export function createDrizzleClient(env: DatabaseEnv) {
       
       globalThis.__drizzle = drizzle(sql, { 
         schema,
-        logger: process.env.NODE_ENV === 'development'
+        logger: env.NODE_ENV === 'development'
       });
       
       globalThis.__drizzle_created = true;

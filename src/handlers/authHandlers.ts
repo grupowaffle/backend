@@ -1,9 +1,8 @@
 import { Context } from 'hono';
 import { sign } from 'hono/jwt';
 import { Env, UserData } from '../config/types/common';
-import { CloudflareD1Client } from '../lib/cloudflareD1Client';
-import { AuthService } from '../services/authService';
-import { LoginRequest, LoginResponse, RegisterRequest, RegisterResponse, ProfileResponse } from '../config/types/auth';
+import { AuthService } from '../services/AuthService';
+import { LoginRequest, LoginResponse, RegisterRequest, RegisterResponse, ProfileResponse, CloudflareD1Client } from '../config/types/auth';
 
 /**
  * Classe responsável por lidar com as operações de autenticação e perfil de usuário.

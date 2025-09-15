@@ -1,42 +1,30 @@
-import { createId } from '@paralleldrive/cuid2';
+// import { createId } from '@paralleldrive/cuid2';
 
 /**
- * Gera um ID único usando CUID2
- * Mais curto que UUID, URL-safe e collision-resistant
+ * Gera um ID único simples para desenvolvimento
  * 
- * @returns string - ID único (25 caracteres)
- * 
- * @example
- * const id = generateId(); // "clz8ixkqc0000v4s8r2h3w5j1"
+ * @returns string - ID único
  */
 export function generateId(): string {
-  return createId();
+  return 'id_' + Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
 }
 
 /**
- * Gera um ID curto usando CUID2
- * Versão mais curta para casos específicos
+ * Gera um ID curto para desenvolvimento
  * 
- * @returns string - ID curto (10 caracteres)
- * 
- * @example
- * const shortId = generateShortId(); // "clz8ixkqc0"
+ * @returns string - ID curto
  */
 export function generateShortId(): string {
-  return createId().slice(0, 10);
+  return 'id_' + Math.random().toString(36).substr(2, 6);
 }
 
 /**
  * Gera um ID para URLs (slug-friendly)
- * Remove caracteres especiais e mantém apenas alfanuméricos
  * 
  * @returns string - ID para URLs
- * 
- * @example
- * const urlId = generateUrlId(); // "clz8ixkqc0000v4s8r2h3w5j1"
  */
 export function generateUrlId(): string {
-  return createId();
+  return 'url_' + Math.random().toString(36).substr(2, 8) + Date.now().toString(36);
 }
 
 /**

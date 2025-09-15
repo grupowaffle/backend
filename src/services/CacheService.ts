@@ -30,11 +30,11 @@ export class CacheService {
   private hits = 0;
   private misses = 0;
   private evictions = 0;
+  private initialized = false;
 
   public constructor() {
     this.cache = new Map();
-    this.setupPeriodicCleanup();
-    this.setupCacheReset();
+    // Note: setupPeriodicCleanup and setupCacheReset moved to lazy initialization
   }
 
   /**
@@ -45,6 +45,17 @@ export class CacheService {
       CacheService.instance = new CacheService();
     }
     return CacheService.instance;
+  }
+
+  /**
+   * Inicialização lazy dos timers (chamada apenas quando necessário)
+   */
+  private ensureInitialized(): void {
+    if (!this.initialized) {
+      this.setupPeriodicCleanup();
+      this.setupCacheReset();
+      this.initialized = true;
+    }
   }
 
   /**
@@ -137,6 +148,7 @@ export class CacheService {
    * Obtém um valor do cache com métricas de performance
    */
   public get<T>(key: string): T | null {
+    this.ensureInitialized(); // Lazy initialization
     const item = this.cache.get(key);
     const now = Date.now();
     

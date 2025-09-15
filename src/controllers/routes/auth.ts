@@ -26,32 +26,30 @@ export function authRoutes() {
   // Register endpoint
   app.post('/register', AuthHandlers.registerHandler);
 
-  // Debug endpoint to test D1 connection
-  app.get('/debug/d1-test', async (c) => {
+  // Debug endpoint to test Neon connection
+  app.get('/debug/neon-test', async (c) => {
     try {
       const env = c.env;
-      console.log('Debug: Testing D1 connection...');
+      console.log('Debug: Testing Neon PostgreSQL connection...');
       
-      const d1Client = new (await import('../../lib/cloudflareD1Client')).CloudflareD1Client({
-        accountId: env.CLOUDFLARE_ACCOUNT_ID,
-        databaseId: env.CLOUDFLARE_D1_DATABASE_ID,
-        apiToken: env.CLOUDFLARE_API_TOKEN,
-      });
+      const { getDb } = await import('../../config/db/connection');
+      const db = getDb(env);
 
       // Test simple query
-      const result = await d1Client.query('SELECT COUNT(*) as count FROM users');
+      const result = await db.execute({ sql: 'SELECT COUNT(*) as count FROM users', args: [] });
       
       return c.json({
         success: true,
-        d1Connection: result.success,
-        userCount: result.result?.results?.[0]?.count || 0,
-        error: result.errors
+        neonConnection: true,
+        userCount: result.rows?.[0]?.count || 0,
+        database: 'neon-postgresql'
       });
     } catch (error) {
-      console.error('Debug D1 test error:', error);
+      console.error('Debug Neon test error:', error);
       return c.json({
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: error instanceof Error ? error.message : 'Unknown error',
+        database: 'neon-postgresql'
       });
     }
   });

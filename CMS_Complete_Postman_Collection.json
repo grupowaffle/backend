@@ -1,0 +1,1851 @@
+{
+  "info": {
+    "name": "CMS Notícias - API Completa",
+    "description": "Collection completa com todas as APIs do sistema CMS de Notícias implementadas até o Epic 6 - Incluindo Tags, correções de métodos HTTP e rotas adicionais",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "version": "1.1.0"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{auth_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8787",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "🏥 System Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": ["{{base_url}}"],
+              "path": ["health"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🔐 Authentication",
+      "item": [
+        {
+          "name": "Register Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.data && response.data.user) {",
+                  "        pm.environment.set('user_id', response.data.user.id);",
+                  "        console.log('User ID saved:', response.data.user.id);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@test.com\",\n  \"password\": \"admin123\",\n  \"name\": \"Test Admin\",\n  \"role\": \"admin\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/register",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "register"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.token) {",
+                  "        pm.environment.set('auth_token', response.token);",
+                  "        console.log('Token saved:', response.token.substring(0, 20) + '...');",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@test.com\",\n  \"password\": \"admin123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "login"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Profile",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{auth_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/auth/user",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "user"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{auth_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/auth/logout",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "logout"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "👥 User Management",
+      "item": [
+        {
+          "name": "List Users",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/users?page=1&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "users"],
+              "query": [
+                {"key": "page", "value": "1"},
+                {"key": "limit", "value": "20"}
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.data && response.data.id) {",
+                  "        pm.environment.set('editor_user_id', response.data.id);",
+                  "        console.log('Editor User ID saved:', response.data.id);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"editor@test.com\",\n  \"name\": \"Test Editor\",\n  \"role\": \"editor\",\n  \"password\": \"editor123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/cms/users",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "users"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get User",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/users/{{user_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "users", "{{user_id}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update User",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Name\",\n  \"role\": \"editor-chefe\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/cms/users/{{user_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "users", "{{user_id}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get My Profile",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/users/me/profile",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "users", "me", "profile"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update My Profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Meu Nome Atualizado\",\n  \"bio\": \"Bio atualizada do usuário\",\n  \"timezone\": \"America/Sao_Paulo\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/cms/users/me/profile",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "users", "me", "profile"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "📝 Articles",
+      "item": [
+        {
+          "name": "List Articles (CMS)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/articles?page=1&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "articles"],
+              "query": [
+                {"key": "page", "value": "1"},
+                {"key": "limit", "value": "20"}
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Article",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.data && response.data.id) {",
+                  "        pm.environment.set('article_id', response.data.id);",
+                  "        console.log('Article ID saved:', response.data.id);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Artigo de Teste via Postman\",\n  \"slug\": \"artigo-teste-postman\",\n  \"content\": [\n    {\n      \"type\": \"paragraph\",\n      \"content\": \"Este é um artigo de teste criado via Postman para demonstrar o sistema de workflow editorial.\"\n    },\n    {\n      \"type\": \"paragraph\",\n      \"content\": \"O sistema permite criar, revisar, aprovar e publicar artigos com controle completo de permissões.\"\n    }\n  ],\n  \"excerpt\": \"Artigo de demonstração do sistema editorial\",\n  \"status\": \"draft\",\n  \"tags\": [\"teste\", \"postman\", \"workflow\"]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/cms/articles",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "articles"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Article",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/articles/{{article_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "articles", "{{article_id}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Article",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Artigo Atualizado via Postman\",\n  \"excerpt\": \"Artigo foi atualizado para demonstrar a funcionalidade de edição\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/cms/articles/{{article_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "articles", "{{article_id}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Publish Article",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/articles/{{article_id}}/publish",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "articles", "{{article_id}}", "publish"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Unpublish Article",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/articles/{{article_id}}/unpublish",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "articles", "{{article_id}}", "unpublish"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Article",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/articles/{{article_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "articles", "{{article_id}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Articles by Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/articles?status=draft&page=1&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "articles"],
+              "query": [
+                {"key": "status", "value": "draft"},
+                {"key": "page", "value": "1"},
+                {"key": "limit", "value": "20"}
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Search Articles",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/articles/search?q=tecnologia&page=1&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "articles", "search"],
+              "query": [
+                {"key": "q", "value": "tecnologia"},
+                {"key": "page", "value": "1"},
+                {"key": "limit", "value": "20"}
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Article Stats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/articles/stats",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "articles", "stats"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "📂 Categories",
+      "item": [
+        {
+          "name": "List Categories",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/categories",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "categories"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Category",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.data && response.data.id) {",
+                  "        pm.environment.set('category_id', response.data.id);",
+                  "        console.log('Category ID saved:', response.data.id);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Tecnologia\",\n  \"slug\": \"tecnologia\",\n  \"description\": \"Artigos sobre tecnologia e inovação\",\n  \"color\": \"#007bff\",\n  \"icon\": \"💻\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/cms/categories",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "categories"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Category",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/categories/{{category_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "categories", "{{category_id}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Category Hierarchy",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/categories/hierarchy",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "categories", "hierarchy"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Category",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Tecnologia Atualizada\",\n  \"description\": \"Descrição atualizada sobre tecnologia\",\n  \"color\": \"#0056b3\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/cms/categories/{{category_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "categories", "{{category_id}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Category",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/categories/{{category_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "categories", "{{category_id}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Category Stats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/categories/stats",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "categories", "stats"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🏷️ Tags",
+      "item": [
+        {
+          "name": "List Tags",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/tags?page=1&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "tags"],
+              "query": [
+                {"key": "page", "value": "1"},
+                {"key": "limit", "value": "20"}
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Tag",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.data && response.data.id) {",
+                  "        pm.environment.set('tag_id', response.data.id);",
+                  "        console.log('Tag ID saved:', response.data.id);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"JavaScript\",\n  \"slug\": \"javascript\",\n  \"color\": \"#f7df1e\",\n  \"description\": \"Artigos sobre JavaScript e desenvolvimento web\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/cms/tags",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "tags"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Tag",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/tags/{{tag_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "tags", "{{tag_id}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Tag",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"JavaScript Atualizado\",\n  \"color\": \"#f0db4f\",\n  \"description\": \"Descrição atualizada sobre JavaScript\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/cms/tags/{{tag_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "tags", "{{tag_id}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Tag",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/tags/{{tag_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "tags", "{{tag_id}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Search Tags",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/tags/search?q=javascript&limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "tags", "search"],
+              "query": [
+                {"key": "q", "value": "javascript"},
+                {"key": "limit", "value": "10"}
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Tag Stats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/tags/stats",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "tags", "stats"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "📷 Media Management",
+      "item": [
+        {
+          "name": "List Media",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/media?page=1&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "media"],
+              "query": [
+                {"key": "page", "value": "1"},
+                {"key": "limit", "value": "20"}
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Upload Media",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.data && response.data.id) {",
+                  "        pm.environment.set('media_id', response.data.id);",
+                  "        console.log('Media ID saved:', response.data.id);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                },
+                {
+                  "key": "alt",
+                  "value": "Imagem de exemplo",
+                  "type": "text"
+                },
+                {
+                  "key": "caption",
+                  "value": "Legenda da imagem",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/cms/media/upload",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "media", "upload"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Media",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/media/{{media_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "media", "{{media_id}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Media",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"alt\": \"Texto alternativo atualizado\",\n  \"caption\": \"Legenda atualizada\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/cms/media/{{media_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "media", "{{media_id}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Media",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/media/{{media_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "media", "{{media_id}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Search Media",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/media/search?q=imagem&page=1&limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "media", "search"],
+              "query": [
+                {"key": "q", "value": "imagem"},
+                {"key": "page", "value": "1"},
+                {"key": "limit", "value": "10"}
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🔄 Workflow Editorial (Epic 6)",
+      "item": [
+        {
+          "name": "Workflow Stats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/workflow/stats",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "workflow", "stats"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Articles by Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/workflow/articles?status=all&page=1&limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "workflow", "articles"],
+              "query": [
+                {"key": "status", "value": "all"},
+                {"key": "page", "value": "1"},
+                {"key": "limit", "value": "10"}
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Workflow Dashboard",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/workflow/dashboard",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "workflow", "dashboard"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Transition Status",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"articleId\": \"{{article_id}}\",\n  \"toStatus\": \"review\",\n  \"reason\": \"Artigo pronto para revisão via Postman\",\n  \"feedback\": \"Todas as informações foram verificadas e o artigo está pronto para análise editorial.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/cms/workflow/transition",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "workflow", "transition"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Article History",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/workflow/articles/{{article_id}}/history",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "workflow", "articles", "{{article_id}}", "history"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Available Transitions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/workflow/articles/{{article_id}}/transitions?currentStatus=draft",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "workflow", "articles", "{{article_id}}", "transitions"],
+              "query": [
+                {"key": "currentStatus", "value": "draft"}
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Assign Article",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"articleId\": \"{{article_id}}\",\n  \"assignedToUserId\": \"{{user_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/cms/workflow/assign",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "workflow", "assign"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Process Scheduled Publications",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/workflow/process-scheduled",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "workflow", "process-scheduled"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🔔 Notifications (Epic 6)",
+      "item": [
+        {
+          "name": "List Notifications",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/notifications/?page=1&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "notifications", ""],
+              "query": [
+                {"key": "page", "value": "1"},
+                {"key": "limit", "value": "20"}
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Unread Notifications",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/notifications/unread",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "notifications", "unread"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Unread Count",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/notifications/unread/count",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "notifications", "unread", "count"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Notification",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.data && response.data.id) {",
+                  "        pm.environment.set('notification_id', response.data.id);",
+                  "        console.log('Notification ID saved:', response.data.id);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{user_id}}\",\n  \"type\": \"system_alert\",\n  \"title\": \"Teste de Notificação via Postman\",\n  \"message\": \"Esta é uma notificação de teste criada através da API do Postman para demonstrar o sistema de notificações do Epic 6.\",\n  \"priority\": \"medium\",\n  \"data\": {\n    \"source\": \"postman_test\",\n    \"timestamp\": \"2024-09-12T10:00:00Z\"\n  },\n  \"actionUrl\": \"/dashboard\",\n  \"actionText\": \"Ver Dashboard\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/cms/notifications/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "notifications", ""]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Mark as Read",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/notifications/{{notification_id}}/read",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "notifications", "{{notification_id}}", "read"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Mark All as Read",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/notifications/read-all",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "notifications", "read-all"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Notification",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/notifications/{{notification_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "notifications", "{{notification_id}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "System Alert",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Alerta do Sistema - Teste Postman\",\n  \"message\": \"Este é um alerta de sistema enviado via Postman para demonstrar como notificações são enviadas automaticamente para todos os administradores do sistema.\",\n  \"priority\": \"high\",\n  \"data\": {\n    \"test_type\": \"system_alert\",\n    \"created_via\": \"postman\",\n    \"timestamp\": \"2024-09-12T10:15:00Z\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/cms/notifications/system-alert",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "notifications", "system-alert"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Notification Stats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/notifications/stats",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "notifications", "stats"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Process Reminders",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/notifications/process-reminders",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "notifications", "process-reminders"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Cleanup Old Notifications",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/notifications/cleanup?days=30",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "notifications", "cleanup"],
+              "query": [
+                {"key": "days", "value": "30"}
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Notifications Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/notifications/health",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "notifications", "health"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "📊 Dashboard (Epic 6)",
+      "item": [
+        {
+          "name": "User Dashboard",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/dashboard/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "dashboard", ""]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Dashboard Overview (Admin/Editor-Chefe)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/dashboard/overview",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "dashboard", "overview"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Editorial Metrics (Admin Only)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/dashboard/metrics",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "dashboard", "metrics"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Quick Stats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/dashboard/quick-stats",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "dashboard", "quick-stats"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Recent Activity",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/dashboard/activity?limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "dashboard", "activity"],
+              "query": [
+                {"key": "limit", "value": "10"}
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Realtime Data",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/dashboard/realtime",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "dashboard", "realtime"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Export Data (JSON)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/dashboard/export?format=json",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "dashboard", "export"],
+              "query": [
+                {"key": "format", "value": "json"}
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Export Data (CSV)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/dashboard/export?format=csv",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "dashboard", "export"],
+              "query": [
+                {"key": "format", "value": "csv"}
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Dashboard Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/dashboard/health",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "dashboard", "health"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "📡 BeehIiv Integration",
+      "item": [
+        {
+          "name": "List Publications",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/beehiiv/publications",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "beehiiv", "publications"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Publication",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.data && response.data.id) {",
+                  "        pm.environment.set('publication_id', response.data.id);",
+                  "        console.log('Publication ID saved:', response.data.id);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"beehiivId\": \"the-news-test\",\n  \"name\": \"The News Test\",\n  \"slug\": \"the-news-test\",\n  \"apiToken\": \"your-beehiiv-api-token-here\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/cms/beehiiv/publications",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "beehiiv", "publications"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Test Connection",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/beehiiv/test/{{publication_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "beehiiv", "test", "{{publication_id}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Test Parser",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/beehiiv/test/{{publication_id}}/parser",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "beehiiv", "test", "{{publication_id}}", "parser"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Sync Latest Newsletter",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"publicationId\": \"{{publication_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/cms/beehiiv/sync/latest",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "beehiiv", "sync", "latest"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Scheduler Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/beehiiv/scheduler/status",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "beehiiv", "scheduler", "status"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Trigger Scheduler",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/beehiiv/scheduler/trigger",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "beehiiv", "scheduler", "trigger"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Configure Scheduler",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"interval\": 360,\n  \"enabled\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/cms/beehiiv/scheduler/config",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "beehiiv", "scheduler", "config"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Start Scheduler",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/beehiiv/scheduler/start",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "beehiiv", "scheduler", "start"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Stop Scheduler",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/beehiiv/scheduler/stop",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "beehiiv", "scheduler", "stop"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "⭐ Featured Content",
+      "item": [
+        {
+          "name": "List Featured Content",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/featured?position=homepage_main&active=true",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "featured"],
+              "query": [
+                {"key": "position", "value": "homepage_main"},
+                {"key": "active", "value": "true"}
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Featured Content",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.data && response.data.id) {",
+                  "        pm.environment.set('featured_id', response.data.id);",
+                  "        console.log('Featured ID saved:', response.data.id);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"articleId\": \"{{article_id}}\",\n  \"featuredType\": \"hero_main\",\n  \"position\": \"homepage_main\",\n  \"priority\": 1,\n  \"startDate\": \"2024-09-12T00:00:00Z\",\n  \"endDate\": \"2024-09-19T23:59:59Z\",\n  \"customTitle\": \"Destaque Principal\",\n  \"customDescription\": \"Este é um artigo em destaque na página principal\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/cms/featured",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "featured"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Featured Content",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"priority\": 2,\n  \"endDate\": \"2024-09-25T23:59:59Z\",\n  \"customDescription\": \"Descrição atualizada do destaque\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/cms/featured/{{featured_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "featured", "{{featured_id}}"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🌐 Public APIs",
+      "item": [
+        {
+          "name": "Public Articles",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/public/articles?page=1&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "public", "articles"],
+              "query": [
+                {"key": "page", "value": "1"},
+                {"key": "limit", "value": "20"}
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Public Article by Slug",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/public/articles/artigo-teste-postman",
+              "host": ["{{base_url}}"],
+              "path": ["api", "public", "articles", "artigo-teste-postman"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Featured Articles (Public)",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/public/articles/featured",
+              "host": ["{{base_url}}"],
+              "path": ["api", "public", "articles", "featured"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Public Categories",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/public/categories",
+              "host": ["{{base_url}}"],
+              "path": ["api", "public", "categories"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Public Search",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/public/search?q=tecnologia&limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["api", "public", "search"],
+              "query": [
+                {"key": "q", "value": "tecnologia"},
+                {"key": "limit", "value": "10"}
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          ""
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          ""
+        ]
+      }
+    }
+  ]
+}

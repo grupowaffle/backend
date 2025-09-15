@@ -16,24 +16,15 @@ export interface Env {
   META_CONVERSION_TOKEN: string;
   TRACKING_BASE_URL: string;
 
-  // Configurações de banco de dados
-  DB: D1Database;
-  DB_FORMS: D1Database;
-  TICKETS: D1Database;
-  STREAKS: D1Database;
-  ACQUISITIONS: D1Database;
-  CRM: D1Database;
-  PIXEL: D1Database;
-  SOCIAL: D1Database;
-  ACTIVATIONS: D1Database;
-  SUBSCRIBERS: D1Database;
-  URL_TRACKING: D1Database;
-  AUTHENTICATION: D1Database;
+  // Configuração de banco de dados - APENAS NEON
+  DATABASE_URL?: string; // URL principal do Neon PostgreSQL
+  NEON_URL?: string; // URL alternativa do Neon (fallback)
   
-  // URLs de banco de dados
-  DATABASE_URL?: string;
-  NEON_URL?: string;
+  // R2 Storage
   FILE_STORAGE: R2Bucket;
+  MEDIA_BUCKET: R2Bucket; // Bucket específico para imagens do CMS
+  R2_DOMAIN?: string; // Domínio público do R2 para servir imagens
+  
   // Cache global
   CACHE: KVNamespace;
 
@@ -47,10 +38,16 @@ export interface Env {
   JWT_USERS: string;
   MASTER_PASSWORD: string; // Senha mestra para acesso privilegiado
   
-  // Cloudflare D1 REST API
-  CLOUDFLARE_ACCOUNT_ID: string;
-  CLOUDFLARE_D1_DATABASE_ID: string;
-  CLOUDFLARE_API_TOKEN: string;
+  // Cloudflare R2 e Workers
+  CLOUDFLARE_ACCOUNT_ID?: string;
+  CLOUDFLARE_API_TOKEN?: string;
+  
+  // Cloudflare R2 Configuration for Advanced Image Upload
+  CLOUDFLARE_BUCKET_NAME: string;
+  CLOUDFLARE_ACCESS_KEY_ID: string;
+  CLOUDFLARE_SECRET_ACCESS_KEY: string;
+  CLOUDFLARE_PUBLIC_URL: string;
+  
   DEV_TOKEN: string;
   // Configurações de servidores
   HOME_SERVER: string;

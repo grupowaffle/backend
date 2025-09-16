@@ -13,6 +13,12 @@ export interface ArticleFilters {
   featuredCategory?: string;
   publishedAfter?: Date;
   publishedBefore?: Date;
+  dateRange?: {
+    start: Date;
+    end: Date;
+  };
+  tags?: string[];
+  excludeId?: string;
   search?: string;
 }
 
@@ -372,6 +378,27 @@ export class ArticleRepository extends BaseRepository {
 
     if (filters.publishedBefore) {
       conditions.push(sql`${articles.publishedAt} <= ${filters.publishedBefore}`);
+    }
+
+    if (filters.dateRange) {
+      conditions.push(
+        and(
+          sql`${articles.publishedAt} >= ${filters.dateRange.start}`,
+          sql`${articles.publishedAt} <= ${filters.dateRange.end}`
+        )
+      );
+    }
+
+    if (filters.tags && filters.tags.length > 0) {
+      // Filter by tags using JSON contains
+      const tagConditions = filters.tags.map(tag => 
+        sql`${articles.tags}::text ILIKE ${'%' + tag + '%'}`
+      );
+      conditions.push(or(...tagConditions));
+    }
+
+    if (filters.excludeId) {
+      conditions.push(sql`${articles.id} != ${filters.excludeId}`);
     }
 
     if (filters.search) {

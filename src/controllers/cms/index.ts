@@ -14,6 +14,7 @@ import { TwoFactorController } from './TwoFactorController';
 import { InvitationController } from './InvitationController';
 import { AuditController } from './AuditController';
 import { AnalyticsController } from './AnalyticsController';
+import { DatabaseController } from './DatabaseController';
 import { ArticleRepository, CategoryRepository } from '../../repositories';
 import { getDrizzleClient } from '../../config/db';
 import { Env } from '../../config/types/common';
@@ -56,6 +57,7 @@ export function createCMSRoutes(env: Env) {
     const invitationController = new InvitationController(env);
     const auditController = new AuditController(env);
     const analyticsController = new AnalyticsController(env);
+  const databaseController = new DatabaseController(env);
     console.log('✅ Controllers created');
 
     // Add test route first (public)
@@ -87,8 +89,12 @@ export function createCMSRoutes(env: Env) {
     cmsApp.route('/2fa', twoFactorController.getApp());
     cmsApp.route('/invitations', invitationController.getApp());
     cmsApp.route('/audit', auditController.getApp());
-    cmsApp.route('/analytics', analyticsController.getApp());
-    console.log('✅ CMS routes mounted successfully');
+  cmsApp.route('/analytics', analyticsController.getApp());
+  
+  // Mount database management routes
+  cmsApp.route('/database', databaseController.getApp());
+  
+  console.log('✅ CMS routes mounted successfully');
 
   } catch (error) {
     console.error('❌ Error initializing CMS routes:', error);

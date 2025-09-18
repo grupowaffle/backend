@@ -2,7 +2,7 @@ import { Context, Next } from 'hono';
 import { verify } from 'hono/jwt';
 import { Env, UserData } from '../config/types/common';
 import { AuthService } from '../services/AuthService';
-import { JWTPayload } from '../config/types/auth';
+import { JWTPayload, CloudflareD1Client } from '../config/types/auth';
 
 /**
  * Extensão do Context do Hono para incluir variáveis de usuário e acesso master.
@@ -114,7 +114,7 @@ export const authMiddleware = async (
         apiToken: env.CLOUDFLARE_API_TOKEN,
       });
 
-      const authHandler = new AuthService(d1Client);
+      const authHandler = new AuthService(d1Client, env);
       const sessionUser = await authHandler.validateSession(payload.sessionToken);
 
       if (!sessionUser) {
@@ -141,7 +141,7 @@ export const authMiddleware = async (
         apiToken: env.CLOUDFLARE_API_TOKEN,
       });
 
-      const authHandler = new AuthService(d1Client);
+      const authHandler = new AuthService(d1Client, env);
       const sessionUser = await authHandler.validateSession(token);
 
       if (sessionUser) {

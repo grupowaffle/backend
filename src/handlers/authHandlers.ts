@@ -29,38 +29,36 @@ export class AuthHandlers {
    */
   static async loginHandler(c: Context<{ Bindings: Env }>): Promise<Response> {
     try {
+      console.log('🔐 Login attempt started');
       const body = await c.req.json();
       const { email, password }: LoginRequest = body;
 
       if (!email || !password) {
+        console.log('❌ Missing email or password');
         return c.json({
           success: false,
           error: 'Email e senha são obrigatórios'
         } as LoginResponse, 400);
       }
 
+      console.log('📧 Login attempt for email:', email);
       const env = c.env;
       const d1Client = AuthHandlers.createD1Client(env);
-      const authHandler = new AuthService(d1Client);
+      const authHandler = new AuthService(d1Client, env);
 
+      console.log('🔍 Attempting login...');
       const result = await authHandler.login({ email, password });
-
-      if (!result) {
-        return c.json({
-          success: false,
-          error: 'Credenciais inválidas'
-        } as LoginResponse, 401);
-      }
+      console.log('✅ Login successful');
 
       // Gera o payload do JWT
       const jwtPayload = {
         userId: result.user.id,
         email: result.user.email,
         role: result.user.role,
-        brand_name: result.user.brand_name,
-        brandId: result.user.brandId,
-        permissions: result.user.permissions,
-        roles: result.user.roles,
+        brand_name: result.user.brandName || null,
+        brandId: result.user.brandId || null,
+        permissions: [], // D1 não tem permissions separadas
+        roles: [result.user.role], // Usar role como array
         sessionToken: result.sessionToken,
         exp: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60), // 30 dias
       };
@@ -70,16 +68,26 @@ export class AuthHandlers {
 
       return c.json({
         success: true,
-        user: result.user,
-        tokens: {
-          jwt: jwtToken,
-          session: result.sessionToken,
+        data: {
+          user: result.user,
+          token: jwtToken,
+          refreshToken: result.sessionToken,
         },
       } as LoginResponse);
     } catch (error) {
+      console.error('❌ Login error:', error);
+      
+      // Tratar erros específicos
+      if (error instanceof Error && error.message === 'Invalid credentials') {
+        return c.json({
+          success: false,
+          error: 'Usuário ou senha inválidos'
+        } as LoginResponse, 401);
+      }
+      
       return c.json({
         success: false,
-        error: 'Erro interno no servidor'
+        error: error instanceof Error ? error.message : 'Erro interno no servidor'
       } as LoginResponse, 500);
     }
   }
@@ -224,7 +232,7 @@ export class AuthHandlers {
       const token = authHeader.substring(7);
       const env = c.env;
       const d1Client = AuthHandlers.createD1Client(env);
-      const authHandler = new AuthService(d1Client);
+      const authHandler = new AuthService(d1Client, env);
 
       await authHandler.logout(token);
 
@@ -233,9 +241,10 @@ export class AuthHandlers {
         message: 'Logout realizado com sucesso',
       });
     } catch (error) {
+      console.error('❌ Logout handler error:', error);
       return c.json({
         success: false,
-        error: 'Erro interno no servidor'
+        error: error instanceof Error ? error.message : 'Erro interno no servidor'
       }, 500);
     }
   }

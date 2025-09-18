@@ -81,14 +81,16 @@ const updateProfileSchema = z.object({
 export class UserController {
   private app: Hono;
   private userService: UserManagementService;
+  private env: Env;
 
   constructor(env: Env) {
     this.app = new Hono();
+    this.env = env;
     const db = getDrizzleClient(env);
     
     // Criar cliente D1 para autenticação
     const d1Client = new CloudflareD1Client({
-      databaseId: env.D1_DATABASE_ID || 'cms-db',
+      databaseId: env.CLOUDFLARE_D1_DATABASE_ID || 'cms-db',
       accountId: env.CLOUDFLARE_ACCOUNT_ID || '',
       apiToken: env.CLOUDFLARE_API_TOKEN || ''
     });
@@ -109,8 +111,8 @@ export class UserController {
           return c.json({ success: false, error: 'Usuário não autenticado' }, 401);
         }
 
-        // Apenas admins e editores-chefe podem listar todos os usuários
-        if (!['admin', 'editor-chefe'].includes(user.role)) {
+        // Apenas admins, super_admin e editores-chefe podem listar todos os usuários
+        if (!['admin', 'super_admin', 'editor-chefe'].includes(user.role)) {
           return c.json({
             success: false,
             error: 'Permissão insuficiente para listar usuários',
@@ -129,12 +131,74 @@ export class UserController {
 
         console.log(`👥 Listing users for ${user.name} (${user.role})`);
 
-        const result = await this.userService.listUsers(searchQuery);
+        // Buscar usuários diretamente do D1
+        const d1Client = new CloudflareD1Client({
+          databaseId: this.env.CLOUDFLARE_D1_DATABASE_ID || '',
+          accountId: this.env.CLOUDFLARE_ACCOUNT_ID || '',
+          apiToken: this.env.CLOUDFLARE_API_TOKEN || ''
+        });
+
+        const page = parseInt(query.page) || 1;
+        const limit = parseInt(query.limit) || 20;
+        const offset = (page - 1) * limit;
+
+        // Buscar usuários do D1
+        const usersResult = await d1Client.execute(
+          `SELECT u.*, r.name as role_name, r.permissions 
+           FROM users u 
+           LEFT JOIN user_roles ur ON u.id = ur.user_id AND ur.is_active = 1
+           LEFT JOIN roles r ON ur.role_id = r.id 
+           WHERE u.is_active = 1 
+           ORDER BY u.created_at DESC 
+           LIMIT ? OFFSET ?`,
+          [limit, offset]
+        );
+
+        // Contar total de usuários
+        const countResult = await d1Client.execute(
+          'SELECT COUNT(*) as total FROM users WHERE is_active = 1'
+        );
+
+        const total = countResult.result?.results?.[0]?.total || 0;
+        const totalPages = Math.ceil(total / limit);
+
+        // Mapear usuários do D1 para o formato esperado
+        const users = usersResult.result?.results?.map((u: any) => ({
+          id: u.id,
+          email: u.email,
+          name: u.display_name,
+          firstName: u.first_name,
+          lastName: u.last_name,
+          role: u.role_name || 'user',
+          permissions: u.permissions ? JSON.parse(u.permissions) : [],
+          isActive: Boolean(u.is_active),
+          emailVerified: Boolean(u.email_verified),
+          twoFactorEnabled: Boolean(u.two_factor_enabled),
+          onboardingCompleted: Boolean(u.onboarding_completed),
+          lastLoginAt: u.last_login_at ? new Date(u.last_login_at) : null,
+          createdAt: new Date(u.created_at),
+          updatedAt: new Date(u.updated_at),
+          loginCount: u.login_count || 0,
+          displayName: u.display_name,
+          initials: u.display_name ? u.display_name.split(' ').map((n: string) => n[0]).join('').toUpperCase() : '',
+          bio: u.bio,
+          avatar: u.avatar,
+          phone: u.phone,
+          timezone: u.timezone,
+          language: u.language,
+          brandId: u.brand_id,
+          brandName: u.brand_name
+        })) || [];
 
         return c.json({
           success: true,
-          data: result.users,
-          pagination: result.pagination,
+          data: users,
+          pagination: {
+            page,
+            limit,
+            total,
+            totalPages
+          },
         });
 
       } catch (error) {
@@ -154,8 +218,8 @@ export class UserController {
           return c.json({ success: false, error: 'Usuário não autenticado' }, 401);
         }
 
-        // Apenas admins podem criar usuários
-        if (user.role !== 'admin') {
+        // Apenas admins e super_admin podem criar usuários
+        if (!['admin', 'super_admin'].includes(user.role)) {
           return c.json({
             success: false,
             error: 'Apenas administradores podem criar usuários',
@@ -205,8 +269,8 @@ export class UserController {
 
         const id = c.req.param('id');
 
-        // Usuários podem ver seus próprios dados, admins/editores-chefe podem ver qualquer usuário
-        if (user.id !== id && !['admin', 'editor-chefe'].includes(user.role)) {
+        // Usuários podem ver seus próprios dados, admins/super_admin/editores-chefe podem ver qualquer usuário
+        if (user.id !== id && !['admin', 'super_admin', 'editor-chefe'].includes(user.role)) {
           return c.json({
             success: false,
             error: 'Permissão insuficiente para ver este usuário',
@@ -250,16 +314,16 @@ export class UserController {
         const data = c.req.valid('json');
 
         // Usuários podem editar seus próprios dados (exceto role e isActive)
-        // Admins podem editar qualquer usuário
-        if (user.id !== id && user.role !== 'admin') {
+        // Admins e super_admin podem editar qualquer usuário
+        if (user.id !== id && !['admin', 'super_admin'].includes(user.role)) {
           return c.json({
             success: false,
             error: 'Permissão insuficiente para editar este usuário',
           }, 403);
         }
 
-        // Se não é admin, não pode alterar role e isActive
-        if (user.role !== 'admin') {
+        // Se não é admin ou super_admin, não pode alterar role e isActive
+        if (!['admin', 'super_admin'].includes(user.role)) {
           delete data.role;
           delete data.isActive;
           delete data.permissions;
@@ -307,8 +371,8 @@ export class UserController {
         const id = c.req.param('id');
         const hardDelete = c.req.query('hard') === 'true';
 
-        // Apenas admins podem deletar usuários
-        if (user.role !== 'admin') {
+        // Apenas admins e super_admin podem deletar usuários
+        if (!['admin', 'super_admin'].includes(user.role)) {
           return c.json({
             success: false,
             error: 'Apenas administradores podem remover usuários',
@@ -364,16 +428,16 @@ export class UserController {
         const id = c.req.param('id');
         const { currentPassword, newPassword } = c.req.valid('json');
 
-        // Apenas o próprio usuário ou admins podem alterar senha
-        if (user.id !== id && user.role !== 'admin') {
+        // Apenas o próprio usuário ou admins/super_admin podem alterar senha
+        if (user.id !== id && !['admin', 'super_admin'].includes(user.role)) {
           return c.json({
             success: false,
             error: 'Permissão insuficiente para alterar senha deste usuário',
           }, 403);
         }
 
-        // Se não é admin, deve fornecer senha atual
-        if (user.id === id && !currentPassword) {
+        // Se não é admin ou super_admin, deve fornecer senha atual
+        if (user.id === id && !['admin', 'super_admin'].includes(user.role) && !currentPassword) {
           return c.json({
             success: false,
             error: 'Senha atual é obrigatória',
@@ -503,7 +567,7 @@ export class UserController {
           return c.json({ success: false, error: 'Usuário não autenticado' }, 401);
         }
 
-        if (user.role !== 'admin') {
+        if (!['admin', 'super_admin'].includes(user.role)) {
           return c.json({
             success: false,
             error: 'Apenas administradores podem ver estatísticas de usuários',

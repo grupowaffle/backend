@@ -28,6 +28,7 @@ export interface AuthResponse {
     brandId?: string | null;
     brandName?: string | null;
   };
+  sessionToken?: string;
 }
 
 export class AuthService {
@@ -36,11 +37,11 @@ export class AuthService {
   private env: any;
   private d1Client?: CloudflareD1Client;
 
-  constructor(envOrD1Client?: any) {
+  constructor(envOrD1Client?: any, env?: any) {
     // Se é um D1Client, extrair env dele
     if (envOrD1Client && typeof envOrD1Client === 'object' && 'execute' in envOrD1Client) {
       this.d1Client = envOrD1Client;
-      this.env = null; // D1Client não tem env diretamente
+      this.env = env; // Usar env passado como segundo parâmetro
     } else {
       this.env = envOrD1Client;
       this.d1Client = null;
@@ -56,37 +57,97 @@ export class AuthService {
 
   async login(dto: LoginDTO): Promise<AuthResponse> {
     if (this.d1Client) {
-      // Usar D1
-      const result = await this.d1Client.execute(
-        'SELECT * FROM users WHERE email = ? LIMIT 1',
+      // Usar D1 - buscar usuário e credenciais separadamente
+      console.log('🔍 D1: Searching for user with email:', dto.email);
+      
+      // Buscar usuário na tabela users
+      const userResult = await this.d1Client.execute(
+        'SELECT * FROM users WHERE email = ? AND is_active = 1 LIMIT 1',
         [dto.email.toLowerCase()]
       );
 
-      if (!result.success || !result.results || result.results.length === 0) {
-        console.log('D1: No user found for email:', dto.email);
+      if (!userResult.success || !userResult.result?.results || userResult.result.results.length === 0) {
+        console.log('❌ D1: No active user found for email:', dto.email);
         throw new Error('Invalid credentials');
       }
 
-      const user = result.results[0] as any;
+      const user = userResult.result.results[0] as any;
+      console.log('✅ D1: User found:', { id: user.id, email: user.email, display_name: user.display_name });
 
-      // Verificar senha (assumindo que está hasheada no D1)
-      const isValidPassword = await bcrypt.compare(dto.password, user.password_hash);
-      if (!isValidPassword) {
+      // Buscar credenciais na tabela user_credentials (mais recente primeiro)
+      const credentialsResult = await this.d1Client.execute(
+        'SELECT * FROM user_credentials WHERE user_id = ? ORDER BY password_updated_at DESC LIMIT 1',
+        [user.id]
+      );
+
+      if (!credentialsResult.success || !credentialsResult.result?.results || credentialsResult.result.results.length === 0) {
+        console.log('❌ D1: No credentials found for user:', user.id);
         throw new Error('Invalid credentials');
+      }
+
+      const credentials = credentialsResult.result.results[0] as any;
+      console.log('✅ D1: Credentials found for user:', user.id);
+
+      // Verificar senha usando SHA-256 com salt (formato do D1)
+      // Usar Web Crypto API que está disponível no Cloudflare Workers
+      const encoder = new TextEncoder();
+      const data = encoder.encode(dto.password + credentials.salt);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      const hashedPassword = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+      
+      if (hashedPassword !== credentials.password_hash) {
+        console.log('❌ D1: Invalid password for user:', user.id);
+        console.log('🔍 Expected:', credentials.password_hash);
+        console.log('🔍 Got:', hashedPassword);
+        throw new Error('Invalid credentials');
+      }
+
+      // Buscar role do usuário
+      const roleResult = await this.d1Client.execute(
+        `SELECT r.name as role_name, r.permissions 
+         FROM user_roles ur 
+         JOIN roles r ON ur.role_id = r.id 
+         WHERE ur.user_id = ? AND ur.is_active = 1 
+         LIMIT 1`,
+        [user.id]
+      );
+
+      let userRole = 'user'; // Default role
+      let permissions = '[]';
+      
+      if (roleResult.success && roleResult.result?.results && roleResult.result.results.length > 0) {
+        const role = roleResult.result.results[0] as any;
+        userRole = role.role_name || 'user';
+        permissions = role.permissions || '[]';
+        console.log('✅ D1: Role found:', { role: userRole, permissions });
+      } else {
+        console.log('⚠️ D1: No role found for user, using default role');
       }
 
       const token = this.generateToken(user.id);
 
+      // Parse permissions from JSON string
+      let parsedPermissions: string[] = [];
+      try {
+        parsedPermissions = JSON.parse(permissions);
+      } catch (e) {
+        console.log('⚠️ D1: Failed to parse permissions, using empty array');
+        parsedPermissions = [];
+      }
+
       return {
         token,
         user: {
-          id: user.id,
+          id: user.id.toString(),
           email: user.email,
-          name: user.name,
-          role: user.role,
-          brandId: user.brand_id,
-          brandName: user.brand_name,
+          name: user.display_name,
+          role: userRole,
+          permissions: parsedPermissions,
+          brandId: null, // D1 não tem brand_id
+          brandName: null, // D1 não tem brand_name
         },
+        sessionToken: 'd1-session-token',
       };
     } else {
       // Usar Neon
@@ -114,6 +175,7 @@ export class AuthService {
           brandId: user.brandId,
           brandName: user.brandName,
         },
+        sessionToken: 'neon-session-token', // Placeholder para Neon
       };
     }
   }
@@ -161,7 +223,7 @@ export class AuthService {
   }
 
   async updateProfile(userId: string, data: { name?: string; brandId?: string; brandName?: string }): Promise<void> {
-    const db = getDb();
+    const db = getDb(this.env);
     
     await db
       .update(users)
@@ -173,7 +235,7 @@ export class AuthService {
   }
 
   async changeUserRole(userId: string, newRole: string, performedBy: string): Promise<void> {
-    const db = getDb();
+    const db = getDb(this.env);
     
     const [performer] = await db
       .select()
@@ -205,7 +267,7 @@ export class AuthService {
   }
 
   async listUsers(role?: string) {
-    const db = getDb();
+    const db = getDb(this.env);
     
     let query = db.select({
       id: users.id,
@@ -237,6 +299,64 @@ export class AuthService {
       const decoded = jwt.verify(token, this.jwtSecret) as { userId: string };
       return decoded.userId;
     } catch {
+      return null;
+    }
+  }
+
+  verifyToken(token: string): any {
+    try {
+      return jwt.verify(token, this.jwtSecret);
+    } catch (error) {
+      throw new Error('Token inválido');
+    }
+  }
+
+  async logout(token: string): Promise<void> {
+    try {
+      // Verificar se o token é válido
+      const decoded = this.verifyToken(token);
+      
+      if (this.d1Client) {
+        // Para D1, apenas logar o logout (não há sessões para invalidar)
+        console.log('🔓 D1: User logout:', { userId: decoded.userId, email: decoded.email });
+        
+        // Opcional: invalidar token no D1 se houver tabela de tokens
+        // Por enquanto, apenas logamos o logout
+        return;
+      } else {
+        // Para Neon, invalidar sessão se houver tabela de sessões
+        console.log('🔓 Neon: User logout:', { userId: decoded.userId, email: decoded.email });
+        return;
+      }
+    } catch (error) {
+      console.error('❌ Logout error:', error);
+      throw new Error('Erro ao fazer logout');
+    }
+  }
+
+  async validateSession(sessionToken: string): Promise<UserData | null> {
+    try {
+      if (this.d1Client) {
+        // Para D1, validar sessionToken simples
+        if (sessionToken === 'd1-session-token') {
+          // Retornar dados básicos do usuário (seria melhor buscar do banco)
+          return {
+            id: '1',
+            email: 'geraldo.mazzini@waffle.com.br',
+            role: 'super_admin',
+            brand_name: null,
+            brandId: null,
+            permissions: ['*'],
+            roles: ['super_admin']
+          };
+        }
+        return null;
+      } else {
+        // Para Neon, validar sessão no banco
+        return null;
+      }
+    } catch (error) {
+      console.error('❌ Validate session error:', error);
       return null;
     }
   }

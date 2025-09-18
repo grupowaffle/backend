@@ -92,109 +92,88 @@ export interface LoginRequest {
     }
 
     async execute(sql: string, params: any[] = []): Promise<D1QueryResult> {
-      // Implementação simplificada - em produção, usar a API real do D1
-      console.log('D1 Execute:', sql, params);
-      
-      // Mock de dados para desenvolvimento
-      console.log('🔍 Verificando SQL:', sql);
-      console.log('🔍 Parâmetros:', params);
-      
-      if (sql.includes('SELECT * FROM users WHERE id = ?')) {
-        const userId = params[0];
-        console.log('🔍 User ID encontrado:', userId);
-        if (userId === 'dev') {
-          console.log('✅ Retornando dados do usuário dev');
+      console.log('🔍 D1 Execute:', sql);
+      console.log('🔍 D1 Params:', params);
+      console.log('🔍 D1 Config:', {
+        accountId: this.config.accountId,
+        databaseId: this.config.databaseId,
+        apiToken: this.config.apiToken ? '***' : 'missing'
+      });
+
+      try {
+        // Fazer chamada real para a API do Cloudflare D1
+        const url = `https://api.cloudflare.com/client/v4/accounts/${this.config.accountId}/d1/database/${this.config.databaseId}/query`;
+        
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${this.config.apiToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            sql: sql,
+            params: params
+          })
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('❌ D1 API Error:', response.status, errorText);
+          throw new Error(`D1 API Error: ${response.status} - ${errorText}`);
+        }
+
+        const data: CloudflareD1ApiResponse = await response.json();
+        console.log('✅ D1 API Response:', data);
+
+        if (!data.success) {
+          console.error('❌ D1 Query failed:', data.errors);
+          return {
+            success: false,
+            errors: data.errors
+          };
+        }
+
+        // Extrair o primeiro resultado da resposta
+        const result = data.result[0];
+        if (!result) {
+          console.log('⚠️ No results from D1');
           return {
             success: true,
             result: {
-              results: [{
-                id: 'dev',
-                email: 'dev@example.com',
-                name: 'Usuário Desenvolvimento',
-                firstName: 'Dev',
-                lastName: 'User',
-                bio: 'Usuário de desenvolvimento',
-                avatar: null,
-                phone: null,
-                timezone: 'America/Sao_Paulo',
-                language: 'pt-BR',
-                role: 'admin',
-                permissions: '["all"]',
-                brandId: null,
-                brandName: null,
-                isActive: true,
-                emailVerified: true,
-                twoFactorEnabled: false,
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString()
-              }],
+              results: [],
               meta: {
                 changes: 0,
                 last_row_id: 0,
-                rows_read: 1,
+                rows_read: 0,
                 rows_written: 0
               }
             }
           };
         }
-      }
-      
-      // Suporte para login por email
-      if (sql.includes('SELECT * FROM users WHERE email = ?')) {
-        const email = params[0];
-        console.log('🔍 Email encontrado:', email);
-        if (email === 'dev@example.com') {
-          console.log('✅ Retornando dados do usuário para login');
-          return {
-            success: true,
-            result: {
-              results: [{
-                id: 'dev',
-                email: 'dev@example.com',
-                password_hash: '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', // password: "password"
-                name: 'Usuário Desenvolvimento',
-                firstName: 'Dev',
-                lastName: 'User',
-                bio: 'Usuário de desenvolvimento',
-                avatar: null,
-                phone: null,
-                timezone: 'America/Sao_Paulo',
-                language: 'pt-BR',
-                role: 'admin',
-                permissions: '["all"]',
-                brandId: null,
-                brandName: null,
-                isActive: true,
-                emailVerified: true,
-                twoFactorEnabled: false,
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString()
-              }],
-              meta: {
-                changes: 0,
-                last_row_id: 0,
-                rows_read: 1,
-                rows_written: 0
-              }
+
+        return {
+          success: true,
+          result: {
+            results: result.results || [],
+            meta: result.meta || {
+              changes: 0,
+              last_row_id: 0,
+              rows_read: 0,
+              rows_written: 0
             }
-          };
-        }
-      }
-      
-      // Simular que não há usuários no D1 (para desenvolvimento)
-      // Em produção, aqui seria feita a chamada real para a API do D1
-      return {
-        success: true,
-        result: {
-          results: [], // Simular tabela vazia
-          meta: {
-            changes: 0,
-            last_row_id: 0,
-            rows_read: 0,
-            rows_written: 0
           }
-        }
-      };
+        };
+
+      } catch (error) {
+        console.error('❌ D1 Client Error:', error);
+        return {
+          success: false,
+          errors: [{
+            code: 500,
+            message: error instanceof Error ? error.message : 'Unknown error'
+          }]
+        };
+      }
     }
 
     async query(sql: string, params: any[] = []): Promise<D1QueryResult> {

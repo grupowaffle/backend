@@ -7,8 +7,8 @@ compatibility_flags = ["nodejs_compat_v2"]
 # R2 Bucket bindings (seguindo padrão do projeto waffle)
 [[r2_buckets]]
 binding = "FILE_STORAGE"
-bucket_name = "thenews-media"
-preview_bucket_name = "thenews-media-dev"
+bucket_name = "waffle-files"
+preview_bucket_name = "waffle-files"
 
 [[r2_buckets]]
 binding = "ASSETS"
@@ -26,3 +26,8 @@ crons = ["0 7 * * *"]
 # Variáveis não-sensíveis podem ficar aqui
 [vars]
 NODE_ENV = "production"
+GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+PORTAL_BASE_URL = "https://portal.thenews.com"
+
+# Variáveis sensíveis devem ficar no .dev.vars para desenvolvimento
+# e ser configuradas via wrangler secret put para produção

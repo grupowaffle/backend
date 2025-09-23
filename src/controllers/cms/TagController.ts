@@ -8,8 +8,10 @@ import { Env } from '../../config/types/common';
 // Validation schemas
 const createTagSchema = z.object({
   name: z.string().min(1, 'Name is required').max(50, 'Name too long'),
+  slug: z.string().optional(),
   description: z.string().optional(),
   color: z.string().optional(),
+  isActive: z.boolean().optional(),
 });
 
 const updateTagSchema = createTagSchema.partial();

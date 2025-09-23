@@ -1,6 +1,6 @@
-import { eq, and, or, desc, asc, count, isNull, isNotNull } from 'drizzle-orm';
+import { eq, and, or, desc, asc, count, isNull, isNotNull, sql } from 'drizzle-orm';
 import { BaseRepository, DatabaseType, PaginationOptions, PaginatedResult } from './BaseRepository';
-import { categories, Category, NewCategory } from '../config/db/schema';
+import { categories, Category, NewCategory, articles } from '../config/db/schema';
 
 export class CategoryRepository extends BaseRepository {
   constructor(db: DatabaseType) {
@@ -120,6 +120,72 @@ export class CategoryRepository extends BaseRepository {
       return await query;
     } catch (error) {
       this.handleError(error, 'list categories');
+      throw error;
+    }
+  }
+
+  /**
+   * List all categories with article count
+   */
+  async listWithArticleCount(options: PaginationOptions = {}): Promise<(Category & { articleCount: number })[]> {
+    try {
+      let query = this.db
+        .select({
+          id: categories.id,
+          name: categories.name,
+          slug: categories.slug,
+          description: categories.description,
+          parentId: categories.parentId,
+          color: categories.color,
+          icon: categories.icon,
+          order: categories.order,
+          isActive: categories.isActive,
+          featuredOnHomepage: categories.featuredOnHomepage,
+          seoTitle: categories.seoTitle,
+          seoDescription: categories.seoDescription,
+          createdAt: categories.createdAt,
+          updatedAt: categories.updatedAt,
+          articleCount: sql<number>`COALESCE(COUNT(${articles.id}), 0)`,
+        })
+        .from(categories)
+        .leftJoin(articles, eq(categories.id, articles.categoryId))
+        .where(eq(categories.isActive, true))
+        .groupBy(
+          categories.id,
+          categories.name,
+          categories.slug,
+          categories.description,
+          categories.parentId,
+          categories.color,
+          categories.icon,
+          categories.order,
+          categories.isActive,
+          categories.featuredOnHomepage,
+          categories.seoTitle,
+          categories.seoDescription,
+          categories.createdAt,
+          categories.updatedAt
+        );
+
+      // Apply sorting
+      const sortBy = options.sortBy || 'order';
+      const sortOrder = options.sortOrder || 'asc';
+      
+      if (sortBy === 'articleCount') {
+        query = sortOrder === 'desc' 
+          ? query.orderBy(desc(sql`COALESCE(COUNT(${articles.id}), 0)`))
+          : query.orderBy(asc(sql`COALESCE(COUNT(${articles.id}), 0)`));
+      } else {
+        query = this.applySorting(query, categories, { sortBy, sortOrder });
+      }
+
+      const result = await query;
+      return result.map(row => ({
+        ...row,
+        articleCount: Number(row.articleCount) || 0,
+      }));
+    } catch (error) {
+      this.handleError(error, 'list categories with article count');
       throw error;
     }
   }

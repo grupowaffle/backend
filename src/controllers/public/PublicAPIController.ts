@@ -3,6 +3,7 @@ import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { getDrizzleClient } from '../../config/db';
 import { ArticleRepository, CategoryRepository, AuthorRepository, TagRepository } from '../../repositories';
+import { users, authors } from '../../config/db/schema';
 import { EngagementTrackingService } from '../../services/EngagementTrackingService';
 import { Env } from '../../config/types/common';
 import { eq, desc, and } from 'drizzle-orm';
@@ -147,28 +148,99 @@ export class PublicAPIController {
           search,
         };
 
-        const result = await this.articleRepository.list(options);
+        const result = await this.articleRepository.list({
+          ...options,
+          includeRelations: true, // Include category and author data
+        });
 
-        // Remove sensitive fields for public consumption
-        const publicArticles = result.data.map(article => ({
-          id: article.id,
-          title: article.title,
-          subtitle: article.subtitle,
-          slug: article.slug,
-          excerpt: article.excerpt,
-          content: article.content,
-          featuredImage: article.featuredImage,
-          tags: article.tags,
-          categoryId: article.categoryId,
-          authorId: article.authorId,
-          publishedAt: article.publishedAt,
-          updatedAt: article.updatedAt,
-          readTime: article.readTime,
-          views: article.views,
-          likes: article.likes,
-          shares: article.shares,
-          isFeatured: article.isFeatured,
-          source: article.source, // 'manual' or 'beehiiv'
+        // Transform articles with enhanced data for portal
+        const publicArticles = await Promise.all(result.data.map(async (item) => {
+          const baseUrl = this.env.PORTAL_BASE_URL || 'https://portal.com';
+          
+          // Handle both structures: with relations and without
+          const article = item.article || item;
+          const category = item.category;
+          const author = article.authorId ? await this.getUserAsAuthor(article.authorId) : null;
+          const featuredMedia = item.featuredMedia;
+          
+          return {
+            id: article.id,
+            title: article.title,
+            subtitle: article.subtitle,
+            slug: article.slug,
+            excerpt: article.excerpt,
+            content: article.content,
+            publishedAt: article.publishedAt,
+            updatedAt: article.updatedAt,
+            readTime: article.readTime,
+            views: article.views || 0,
+            likes: article.likes || 0,
+            shares: article.shares || 0,
+            isFeatured: article.isFeatured,
+            source: article.source,
+            
+            // URLs completas para navegação
+            url: `/artigo/${article.slug}`,
+            canonicalUrl: `${baseUrl}/artigo/${article.slug}`,
+            
+            // Dados de categoria completos
+            category: category ? {
+              id: category.id,
+              name: category.name,
+              slug: category.slug,
+              description: category.description,
+              color: category.color,
+              icon: category.icon,
+              url: `/categoria/${category.slug}`,
+              categoryUrl: `${baseUrl}/categoria/${category.slug}`,
+            } : null,
+            
+            // Dados de autor completos
+            author: author ? {
+              id: author.id,
+              name: author.name,
+              email: author.email,
+              avatar: author.avatar,
+              bio: author.bio,
+              url: `/autor/${author.slug || author.id}`,
+              authorUrl: `${baseUrl}/autor/${author.slug || author.id}`,
+            } : null,
+            
+            // Imagem otimizada com metadados
+            featuredImage: featuredMedia ? {
+              url: featuredMedia.url,
+              alt: featuredMedia.alt || article.title,
+              width: featuredMedia.width,
+              height: featuredMedia.height,
+              caption: featuredMedia.caption,
+              thumbnail: featuredMedia.thumbnail,
+            } : this.extractFeaturedImageFromContent(article.content, article.title),
+            
+            // SEO otimizado
+            seo: {
+              title: article.seoTitle || article.title,
+              description: article.seoDescription || article.excerpt,
+              keywords: article.seoKeywords || article.tags || [],
+              canonicalUrl: `${baseUrl}/artigo/${article.slug}`,
+            },
+            
+            // Tags
+            tags: article.tags || [],
+            
+            // Estatísticas
+            stats: {
+              views: article.views || 0,
+              likes: article.likes || 0,
+              shares: article.shares || 0,
+              comments: 0, // TODO: Implementar contagem de comentários
+            },
+            
+            // Metadados adicionais
+            wordCount: this.calculateWordCount(article.content),
+            readingTime: this.calculateReadingTime(article.content),
+            publishedDate: article.publishedAt ? new Date(article.publishedAt).toLocaleDateString('pt-BR') : null,
+            publishedTimeAgo: article.publishedAt ? this.getTimeAgo(article.publishedAt) : null,
+          };
         }));
 
         return c.json({
@@ -202,21 +274,65 @@ export class PublicAPIController {
             status: 'published',
             isFeatured: true,
           },
+          includeRelations: true, // Include category and author data
         });
 
-        const featuredArticles = result.data.map(article => ({
-          id: article.id,
-          title: article.title,
-          subtitle: article.subtitle,
-          slug: article.slug,
-          excerpt: article.excerpt,
-          featuredImage: article.featuredImage,
-          categoryId: article.categoryId,
-          publishedAt: article.publishedAt,
-          readTime: article.readTime,
-          views: article.views,
-          source: article.source,
-        }));
+        const baseUrl = this.env.PORTAL_BASE_URL || 'https://portal.com';
+
+        const featuredArticles = result.data.map(item => {
+          // Handle both structures: with relations and without
+          const article = item.article || item;
+          const category = item.category;
+          const author = item.author;
+          const featuredMedia = item.featuredMedia;
+          
+          return {
+            id: article.id,
+            title: article.title,
+            subtitle: article.subtitle,
+            slug: article.slug,
+            excerpt: article.excerpt,
+            publishedAt: article.publishedAt,
+            readTime: article.readTime,
+            views: article.views || 0,
+            source: article.source,
+            
+            // URLs completas
+            url: `/artigo/${article.slug}`,
+            canonicalUrl: `${baseUrl}/artigo/${article.slug}`,
+            
+            // Dados de categoria
+            category: category ? {
+              id: category.id,
+              name: category.name,
+              slug: category.slug,
+              color: category.color,
+              icon: category.icon,
+              url: `/categoria/${category.slug}`,
+            } : null,
+            
+            // Dados de autor
+            author: author ? {
+              id: author.id,
+              name: author.name,
+              avatar: author.avatar,
+              url: `/autor/${author.slug || author.id}`,
+            } : null,
+            
+            // Imagem otimizada
+            featuredImage: featuredMedia ? {
+              url: featuredMedia.url,
+              alt: featuredMedia.alt || article.title,
+              width: featuredMedia.width,
+              height: featuredMedia.height,
+            } : null,
+            
+            // Metadados adicionais
+            wordCount: this.calculateWordCount(article.content),
+            readingTime: this.calculateReadingTime(article.content),
+            publishedTimeAgo: article.publishedAt ? this.getTimeAgo(article.publishedAt) : null,
+          };
+        });
 
         return c.json({
           success: true,
@@ -269,7 +385,16 @@ export class PublicAPIController {
           os: this.engagementTrackingService.detectOS(userAgent),
         });
 
-        // Return public article data
+        // Get related data for enhanced response
+        const [category, author, featuredMedia] = await Promise.all([
+          article.categoryId ? this.categoryRepository.findById(article.categoryId) : null,
+          article.authorId ? this.getUserAsAuthor(article.authorId) : null,
+          article.featuredImageId ? this.articleRepository.getMediaById(article.featuredImageId) : null,
+        ]);
+
+        const baseUrl = this.env.PORTAL_BASE_URL || 'https://portal.com';
+
+        // Return enhanced public article data
         const publicArticle = {
           id: article.id,
           title: article.title,
@@ -277,18 +402,77 @@ export class PublicAPIController {
           slug: article.slug,
           excerpt: article.excerpt,
           content: article.content,
-          featuredImage: article.featuredImage,
-          tags: article.tags,
-          categoryId: article.categoryId,
           publishedAt: article.publishedAt,
           updatedAt: article.updatedAt,
           readTime: article.readTime,
           views: (article.views || 0) + 1, // Include the incremented view
-          likes: article.likes,
-          shares: article.shares,
+          likes: article.likes || 0,
+          shares: article.shares || 0,
           isFeatured: article.isFeatured,
           source: article.source,
-          beehiivUrl: article.beehiivUrl, // Original BeehIV URL if available
+          beehiivUrl: article.beehiivUrl,
+          
+          // URLs completas para navegação
+          url: `/artigo/${article.slug}`,
+          canonicalUrl: `${baseUrl}/artigo/${article.slug}`,
+          
+          // Dados de categoria completos
+          category: category ? {
+            id: category.id,
+            name: category.name,
+            slug: category.slug,
+            description: category.description,
+            color: category.color,
+            icon: category.icon,
+            url: `/categoria/${category.slug}`,
+            categoryUrl: `${baseUrl}/categoria/${category.slug}`,
+          } : null,
+          
+          // Dados de autor completos
+          author: author ? {
+            id: author.id,
+            name: author.name,
+            email: author.email,
+            avatar: author.avatar,
+            bio: author.bio,
+            url: `/autor/${author.slug || author.id}`,
+            authorUrl: `${baseUrl}/autor/${author.slug || author.id}`,
+          } : null,
+          
+          // Imagem otimizada com metadados
+          featuredImage: featuredMedia ? {
+            url: featuredMedia.url,
+            alt: featuredMedia.alt || article.title,
+            width: featuredMedia.width,
+            height: featuredMedia.height,
+            caption: featuredMedia.caption,
+            thumbnail: featuredMedia.thumbnail,
+          } : this.extractFeaturedImageFromContent(article.content, article.title),
+          
+          // SEO otimizado
+          seo: {
+            title: article.seoTitle || article.title,
+            description: article.seoDescription || article.excerpt,
+            keywords: article.seoKeywords || article.tags || [],
+            canonicalUrl: `${baseUrl}/artigo/${article.slug}`,
+          },
+          
+          // Tags
+          tags: article.tags || [],
+          
+          // Estatísticas
+          stats: {
+            views: (article.views || 0) + 1,
+            likes: article.likes || 0,
+            shares: article.shares || 0,
+            comments: 0, // TODO: Implementar contagem de comentários
+          },
+          
+          // Metadados adicionais
+          wordCount: this.calculateWordCount(article.content),
+          readingTime: this.calculateReadingTime(article.content),
+          publishedDate: article.publishedAt ? new Date(article.publishedAt).toLocaleDateString('pt-BR') : null,
+          publishedTimeAgo: article.publishedAt ? this.getTimeAgo(article.publishedAt) : null,
         };
 
         return c.json({
@@ -1304,6 +1488,131 @@ export class PublicAPIController {
         }, 500);
       }
     });
+  }
+
+  /**
+   * Calculate word count from HTML content
+   */
+  private calculateWordCount(content: string): number {
+    if (!content) return 0;
+    
+    // Remove HTML tags and get plain text
+    const plainText = content.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+    
+    // Count words (split by spaces and filter empty strings)
+    const words = plainText.split(' ').filter(word => word.length > 0);
+    return words.length;
+  }
+
+  /**
+   * Calculate reading time in minutes
+   */
+  private calculateReadingTime(content: string): string {
+    const wordCount = this.calculateWordCount(content);
+    const wordsPerMinute = 200; // Average reading speed
+    const minutes = Math.ceil(wordCount / wordsPerMinute);
+    
+    if (minutes === 1) return '1 min';
+    return `${minutes} min`;
+  }
+
+  /**
+   * Get time ago string in Portuguese
+   */
+  private getTimeAgo(dateString: string): string {
+    const now = new Date();
+    const date = new Date(dateString);
+    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+    
+    if (diffInSeconds < 60) return 'há poucos segundos';
+    if (diffInSeconds < 3600) return `há ${Math.floor(diffInSeconds / 60)} min`;
+    if (diffInSeconds < 86400) return `há ${Math.floor(diffInSeconds / 3600)}h`;
+    if (diffInSeconds < 2592000) return `há ${Math.floor(diffInSeconds / 86400)} dias`;
+    if (diffInSeconds < 31536000) return `há ${Math.floor(diffInSeconds / 2592000)} meses`;
+    return `há ${Math.floor(diffInSeconds / 31536000)} anos`;
+  }
+
+  /**
+   * Extract featured image from article content
+   */
+  private extractFeaturedImageFromContent(content: string, articleTitle: string): any {
+    if (!content || typeof content !== 'string') return null;
+
+    // Regex para encontrar tags <img> no conteúdo
+    const imgRegex = /<img[^>]+src=["']([^"']+)["'][^>]*>/i;
+    const match = content.match(imgRegex);
+
+    if (match && match[1]) {
+      const imageUrl = match[1];
+
+      // Verificar se é uma URL válida
+      if (imageUrl.startsWith('http') || imageUrl.startsWith('/')) {
+        return {
+          url: imageUrl,
+          alt: articleTitle,
+          width: null,
+          height: null,
+          caption: null,
+          thumbnail: null,
+          source: 'content' // Indica que foi extraída do conteúdo
+        };
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Get user as author data
+   */
+  private async getUserAsAuthor(authorId: string): Promise<any> {
+    try {
+      const db = getDrizzleClient(this.env);
+
+      // First try to get from authors table (preferred)
+      const author = await db
+        .select()
+        .from(authors)
+        .where(eq(authors.id, authorId))
+        .limit(1);
+
+      if (author[0]) {
+        return {
+          id: author[0].id,
+          name: author[0].name,
+          email: author[0].email,
+          avatar: author[0].avatar,
+          bio: author[0].bio,
+          slug: author[0].slug,
+        };
+      }
+
+      // Fallback: try to get from users table if authorId is actually a user ID
+      if (!isNaN(Number(authorId))) {
+        const user = await db
+          .select()
+          .from(users)
+          .where(eq(users.id, parseInt(authorId)))
+          .limit(1);
+
+        if (user[0]) {
+          const userData = user[0];
+          return {
+            id: userData.id.toString(),
+            name: userData.name || 'Autor',
+            email: userData.email,
+            avatar: userData.avatar,
+            bio: userData.bio,
+            slug: userData.email?.split('@')[0] || userData.id.toString(),
+          };
+        }
+      }
+
+      return null;
+    } catch (error) {
+      console.error('Error fetching author:', error);
+      return null;
+    }
   }
 
   /**

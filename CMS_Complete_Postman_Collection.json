@@ -1,9 +1,9 @@
 {
   "info": {
     "name": "CMS Notícias - API Completa",
-    "description": "Collection completa com todas as APIs do sistema CMS de Notícias implementadas até o Epic 6 - Incluindo Tags, correções de métodos HTTP e rotas adicionais",
+    "description": "Collection completa com todas as APIs do sistema CMS de Notícias - Incluindo Analytics Dashboard, Authors Management, Tags, Public Portal APIs, Engagement Tracking e Database Management",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "version": "1.1.0"
+    "version": "2.0.0"
   },
   "auth": {
     "type": "bearer",
@@ -1735,10 +1735,271 @@
       ]
     },
     {
-      "name": "🌐 Public APIs",
+      "name": "👥 Authors Management",
       "item": [
         {
-          "name": "Public Articles",
+          "name": "List Authors",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/authors?page=1&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "authors"],
+              "query": [
+                {"key": "page", "value": "1"},
+                {"key": "limit", "value": "20"}
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Author",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.data && response.data.id) {",
+                  "        pm.environment.set('author_id', response.data.id);",
+                  "        console.log('Author ID saved:', response.data.id);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"João Silva\",\n  \"slug\": \"joao-silva\",\n  \"bio\": \"Jornalista especializado em tecnologia e inovação\",\n  \"email\": \"joao@exemplo.com\",\n  \"expertise\": \"Tecnologia, Inovação, Startups\",\n  \"location\": \"São Paulo, SP\",\n  \"socialLinks\": {\n    \"twitter\": \"@joaosilva\",\n    \"linkedin\": \"joao-silva\",\n    \"website\": \"https://joaosilva.com\"\n  },\n  \"featuredAuthor\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/cms/authors",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "authors"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Author",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/authors/{{author_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "authors", "{{author_id}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Author",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"João Silva Atualizado\",\n  \"bio\": \"Bio atualizada do autor\",\n  \"expertise\": \"Tecnologia, Inovação, Startups, IA\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/cms/authors/{{author_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "authors", "{{author_id}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Author",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/authors/{{author_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "authors", "{{author_id}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Author Stats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/authors/stats",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "authors", "stats"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "📊 Analytics Dashboard",
+      "item": [
+        {
+          "name": "Dashboard Overview",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/analytics/dashboard",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "analytics", "dashboard"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Source Comparison",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/analytics/comparison",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "analytics", "comparison"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Top Articles",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/analytics/top-articles?limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "analytics", "top-articles"],
+              "query": [
+                {"key": "limit", "value": "10"}
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Article Analytics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/analytics/articles/{{analytics_article_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "analytics", "articles", "{{analytics_article_id}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Daily Metrics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/analytics/daily?days=30",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "analytics", "daily"],
+              "query": [
+                {"key": "days", "value": "30"}
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Category Performance",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/analytics/categories",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "analytics", "categories"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Author Performance",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/analytics/authors",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "analytics", "authors"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Article Analytics",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"views\": 150,\n  \"likes\": 25,\n  \"shares\": 8,\n  \"avgTimeOnPage\": 180,\n  \"bounceRate\": 15\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/cms/analytics/articles/{{analytics_article_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "analytics", "articles", "{{analytics_article_id}}"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🌐 Public APIs - Complete Portal",
+      "item": [
+        {
+          "name": "Public Articles List",
           "request": {
             "auth": {
               "type": "noauth"
@@ -1758,6 +2019,30 @@
           "response": []
         },
         {
+          "name": "Public Articles with Filters",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/public/articles?category=tecnologia&featured=true&sort=publishedAt&order=desc&page=1&limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["api", "public", "articles"],
+              "query": [
+                {"key": "category", "value": "tecnologia"},
+                {"key": "featured", "value": "true"},
+                {"key": "sort", "value": "publishedAt"},
+                {"key": "order", "value": "desc"},
+                {"key": "page", "value": "1"},
+                {"key": "limit", "value": "10"}
+              ]
+            }
+          },
+          "response": []
+        },
+        {
           "name": "Public Article by Slug",
           "request": {
             "auth": {
@@ -1766,15 +2051,15 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{base_url}}/api/public/articles/artigo-teste-postman",
+              "raw": "{{base_url}}/api/public/articles/artigo-de-teste-javascript",
               "host": ["{{base_url}}"],
-              "path": ["api", "public", "articles", "artigo-teste-postman"]
+              "path": ["api", "public", "articles", "artigo-de-teste-javascript"]
             }
           },
           "response": []
         },
         {
-          "name": "Featured Articles (Public)",
+          "name": "Related Articles",
           "request": {
             "auth": {
               "type": "noauth"
@@ -1782,9 +2067,285 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{base_url}}/api/public/articles/featured",
+              "raw": "{{base_url}}/api/public/articles/artigo-de-teste-javascript/related?limit=5",
               "host": ["{{base_url}}"],
-              "path": ["api", "public", "articles", "featured"]
+              "path": ["api", "public", "articles", "artigo-de-teste-javascript", "related"],
+              "query": [
+                {"key": "limit", "value": "5"}
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Like Article",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/public/articles/artigo-de-teste-javascript/like",
+              "host": ["{{base_url}}"],
+              "path": ["api", "public", "articles", "artigo-de-teste-javascript", "like"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Share Article",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"platform\": \"twitter\",\n  \"url\": \"https://twitter.com/intent/tweet?text=Check out this article!\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/public/articles/artigo-de-teste-javascript/share",
+              "host": ["{{base_url}}"],
+              "path": ["api", "public", "articles", "artigo-de-teste-javascript", "share"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Track Time on Page",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"seconds\": 120\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/public/articles/artigo-de-teste-javascript/time",
+              "host": ["{{base_url}}"],
+              "path": ["api", "public", "articles", "artigo-de-teste-javascript", "time"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Track Bounce",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/public/articles/artigo-de-teste-javascript/bounce",
+              "host": ["{{base_url}}"],
+              "path": ["api", "public", "articles", "artigo-de-teste-javascript", "bounce"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Track Click-through",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"element\": \"read-more-button\",\n  \"url\": \"/articles/related-article\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/public/articles/artigo-de-teste-javascript/click-through",
+              "host": ["{{base_url}}"],
+              "path": ["api", "public", "articles", "artigo-de-teste-javascript", "click-through"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Public Authors List",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/public/authors?page=1&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "public", "authors"],
+              "query": [
+                {"key": "page", "value": "1"},
+                {"key": "limit", "value": "20"}
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Public Author by Slug",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/public/authors/joao-silva",
+              "host": ["{{base_url}}"],
+              "path": ["api", "public", "authors", "joao-silva"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Author's Articles",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/public/authors/joao-silva/articles?page=1&limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["api", "public", "authors", "joao-silva", "articles"],
+              "query": [
+                {"key": "page", "value": "1"},
+                {"key": "limit", "value": "10"}
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Public Tags List",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/public/tags?page=1&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "public", "tags"],
+              "query": [
+                {"key": "page", "value": "1"},
+                {"key": "limit", "value": "20"}
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Popular Tags",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/public/tags/popular?limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["api", "public", "tags", "popular"],
+              "query": [
+                {"key": "limit", "value": "10"}
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Public Tag by Slug",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/public/tags/javascript",
+              "host": ["{{base_url}}"],
+              "path": ["api", "public", "tags", "javascript"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Tag's Articles",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/public/tags/javascript/articles?page=1&limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["api", "public", "tags", "javascript", "articles"],
+              "query": [
+                {"key": "page", "value": "1"},
+                {"key": "limit", "value": "10"}
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Public Search",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/public/search?q=tecnologia&limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["api", "public", "search"],
+              "query": [
+                {"key": "q", "value": "tecnologia"},
+                {"key": "limit", "value": "10"}
+              ]
             }
           },
           "response": []
@@ -1806,7 +2367,7 @@
           "response": []
         },
         {
-          "name": "Public Search",
+          "name": "RSS Feed - General",
           "request": {
             "auth": {
               "type": "noauth"
@@ -1814,13 +2375,56 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{base_url}}/api/public/search?q=tecnologia&limit=10",
+              "raw": "{{base_url}}/api/public/rss",
               "host": ["{{base_url}}"],
-              "path": ["api", "public", "search"],
-              "query": [
-                {"key": "q", "value": "tecnologia"},
-                {"key": "limit", "value": "10"}
-              ]
+              "path": ["api", "public", "rss"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "RSS Feed - Category",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/public/rss/category/tecnologia",
+              "host": ["{{base_url}}"],
+              "path": ["api", "public", "rss", "category", "tecnologia"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🔧 Database Management",
+      "item": [
+        {
+          "name": "Create Analytics Table",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/database/create-analytics-table",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "database", "create-analytics-table"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Verify Analytics Table",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/database/verify-analytics-table",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "database", "verify-analytics-table"]
             }
           },
           "response": []

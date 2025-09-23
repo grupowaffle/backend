@@ -193,10 +193,12 @@ export class CategoryController {
       try {
         const params = c.req.valid('query');
 
-        const categories = await this.categoryRepository.list({
+        const categories = await this.categoryRepository.listWithArticleCount({
           sortBy: params.sortBy,
           sortOrder: params.sortOrder,
         });
+
+        console.log('📂 Categories with article count:', categories.map(c => ({ name: c.name, articleCount: c.articleCount })));
 
         return c.json({
           success: true,

@@ -15,6 +15,7 @@ import { InvitationController } from './InvitationController';
 import { AuditController } from './AuditController';
 import { AnalyticsController } from './AnalyticsController';
 import { DatabaseController } from './DatabaseController';
+import { createSEOController } from './SEOController';
 import { ArticleRepository, CategoryRepository } from '../../repositories';
 import { getDrizzleClient } from '../../config/db';
 import { Env } from '../../config/types/common';
@@ -42,7 +43,7 @@ export function createCMSRoutes(env: Env) {
 
     // Initialize controllers
     console.log('🎮 Creating controllers...');
-    const articleController = new ArticleController(articleRepository);
+    const articleController = new ArticleController(articleRepository, env);
     const categoryController = new CategoryController(categoryRepository);
     const beehiivController = new BeehiivController(env);
     // const mediaController = new MediaController(env);
@@ -57,7 +58,8 @@ export function createCMSRoutes(env: Env) {
     const invitationController = new InvitationController(env);
     const auditController = new AuditController(env);
     const analyticsController = new AnalyticsController(env);
-  const databaseController = new DatabaseController(env);
+    const databaseController = new DatabaseController(env);
+    const seoController = createSEOController(env);
     console.log('✅ Controllers created');
 
     // Add test route first (public)
@@ -70,7 +72,10 @@ export function createCMSRoutes(env: Env) {
       });
     });
 
-    // Apply authentication middleware to all CMS routes except test
+    // Mount media routes BEFORE authentication middleware (for public file serving)
+    cmsApp.route('/media', mediaControllerSimple.getApp());
+
+    // Apply authentication middleware to all CMS routes except test and media/serve/*
     cmsApp.use('/*', authMiddleware);
 
     // Mount routes with authentication
@@ -79,7 +84,7 @@ export function createCMSRoutes(env: Env) {
     cmsApp.route('/categories', categoryController.getApp());
     cmsApp.route('/beehiiv', beehiivController.getApp());
     // cmsApp.route('/media', mediaController.getApp());
-    cmsApp.route('/media', mediaControllerSimple.getApp());
+    // cmsApp.route('/media', mediaControllerSimple.getApp()); // Moved above auth middleware
     cmsApp.route('/tags', tagController.getApp());
     cmsApp.route('/workflow', workflowController.getApp());
     cmsApp.route('/notifications', notificationController.getApp());
@@ -90,6 +95,9 @@ export function createCMSRoutes(env: Env) {
     cmsApp.route('/invitations', invitationController.getApp());
     cmsApp.route('/audit', auditController.getApp());
   cmsApp.route('/analytics', analyticsController.getApp());
+  
+  // Mount SEO AI routes
+  cmsApp.route('/seo', seoController.getApp());
   
   // Mount database management routes
   cmsApp.route('/database', databaseController.getApp());

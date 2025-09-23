@@ -1,4 +1,4 @@
-import { eq, and, or, desc, asc, count, sql, like, isNull, isNotNull, inArray } from 'drizzle-orm';
+import { eq, and, or, desc, asc, count, sql, like, isNull, isNotNull, inArray, notInArray, ne } from 'drizzle-orm';
 import { BaseRepository, DatabaseType, PaginationOptions, PaginatedResult } from './BaseRepository';
 import { articles, categories, authors, media, Article, NewArticle } from '../config/db/schema';
 
@@ -306,6 +306,85 @@ export class ArticleRepository extends BaseRepository {
     }
   }
 
+  /**
+   * Find article by BeehIV post ID
+   */
+  async findByBeehiivPostId(postId: string): Promise<Article | null> {
+    try {
+      const result = await this.db
+        .select()
+        .from(articles)
+        .where(
+          and(
+            eq(articles.beehiivPostId, postId),
+            // Ignore deleted and archived articles
+            notInArray(articles.status, ['deleted', 'archived'])
+          )
+        )
+        .limit(1);
+
+      return result[0] || null;
+    } catch (error) {
+      this.handleError(error, 'find article by beehiiv post id');
+      throw error;
+    }
+  }
+
+  /**
+   * Upsert article (create or update if exists)
+   */
+  async upsert(data: NewArticle): Promise<Article> {
+    try {
+      console.log(`🔄 Upserting article: ${data.title}`);
+
+      // Check if article already exists by beehiivPostId
+      let existingArticle: Article | null = null;
+
+      if (data.beehiivPostId) {
+        existingArticle = await this.findByBeehiivPostId(data.beehiivPostId);
+      }
+
+      // IMPORTANT: For BeehIV content, we ONLY match by beehiivPostId
+      // We do NOT check by slug to avoid false matches with manual articles
+      // Each BeehIV post has a unique ID like "post_5990a261-c61f-4a98-841f-d514d71c8c9b"
+
+      if (existingArticle) {
+        // Check if article is already published or in advanced workflow states
+        const protectedStatuses = ['published', 'scheduled', 'in_review', 'approved'];
+        const isProtected = protectedStatuses.includes(existingArticle.status) ||
+                           (existingArticle.status === 'published' && existingArticle.publishedAt);
+
+        if (isProtected) {
+          console.log(`🚫 Article in protected status (${existingArticle.status}), skipping update: ${existingArticle.id} - "${existingArticle.title}"`);
+          return existingArticle;
+        }
+
+        console.log(`📝 Updating existing article: ${existingArticle.id} (status: ${existingArticle.status})`);
+
+        // Update existing article only if not published
+        const [updatedArticle] = await this.db
+          .update(articles)
+          .set({
+            ...data,
+            updatedAt: new Date(),
+          })
+          .where(eq(articles.id, existingArticle.id))
+          .returning();
+
+        return updatedArticle;
+      } else {
+        console.log(`✨ Creating new article: ${data.title}`);
+
+        // Create new article
+        return await this.create(data);
+      }
+    } catch (error) {
+      console.error('❌ Error in upsert article:', error);
+      this.handleError(error, 'upsert article');
+      throw error;
+    }
+  }
+
 
   /**
    * Get articles count by status
@@ -326,6 +405,78 @@ export class ArticleRepository extends BaseRepository {
       }, {} as Record<string, number>);
     } catch (error) {
       this.handleError(error, 'get articles count by status');
+      throw error;
+    }
+  }
+
+  /**
+   * Get complete article statistics
+   */
+  async getCompleteStats(): Promise<{
+    total: number;
+    published: number;
+    draft: number;
+    review: number;
+    archived: number;
+    beehiiv_pending: number;
+    approved: number;
+    scheduled: number;
+    rejected: number;
+    totalViews: number;
+    totalLikes: number;
+    totalShares: number;
+    totalComments: number;
+  }> {
+    try {
+      // Get status counts
+      const statusCounts = await this.getCountByStatus();
+      
+      // Get totals for views, likes, shares
+      const totalsResult = await this.db
+        .select({
+          totalViews: sql<number>`COALESCE(SUM(${articles.views}), 0)`,
+          totalLikes: sql<number>`COALESCE(SUM(${articles.likes}), 0)`,
+          totalShares: sql<number>`COALESCE(SUM(${articles.shares}), 0)`,
+          totalCount: count(),
+        })
+        .from(articles);
+
+      const totals = totalsResult[0] || {
+        totalViews: 0,
+        totalLikes: 0,
+        totalShares: 0,
+        totalCount: 0,
+      };
+
+      // Map status counts with defaults
+      const published = statusCounts.published || 0;
+      const draft = statusCounts.draft || 0;
+      const review = statusCounts.review || 0;
+      const archived = statusCounts.archived || 0;
+      const beehiiv_pending = statusCounts.beehiiv_pending || 0;
+      const approved = statusCounts.approved || 0;
+      const scheduled = statusCounts.scheduled || 0;
+      const rejected = statusCounts.rejected || 0;
+
+      const total = Number(totals.totalCount);
+
+      return {
+        total,
+        published,
+        draft,
+        review,
+        archived,
+        beehiiv_pending,
+        approved,
+        scheduled,
+        rejected,
+        totalViews: Number(totals.totalViews),
+        totalLikes: Number(totals.totalLikes),
+        totalShares: Number(totals.totalShares),
+        totalComments: 0, // TODO: Implementar quando houver sistema de comentários
+      };
+    } catch (error) {
+      this.handleError(error, 'get complete article stats');
       throw error;
     }
   }

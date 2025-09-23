@@ -1,6 +1,7 @@
 import { BeehiivRepository, ArticleRepository } from '../repositories';
 import { DatabaseType } from '../repositories/BaseRepository';
 import { ContentParser } from './ContentParser';
+import { TheNewsContentParser } from './TheNewsContentParser';
 import { generateId } from '../lib/cuid';
 
 // Types based on BeehIV API response
@@ -51,6 +52,7 @@ export class BeehiivService {
   private beehiivRepository: BeehiivRepository;
   private articleRepository: ArticleRepository;
   private contentParser: ContentParser;
+  private theNewsParser: TheNewsContentParser;
   private baseUrl = 'https://api.beehiiv.com/v2';
   private env: any;
 
@@ -58,6 +60,7 @@ export class BeehiivService {
     this.beehiivRepository = new BeehiivRepository(db);
     this.articleRepository = new ArticleRepository(db);
     this.contentParser = new ContentParser();
+    this.theNewsParser = new TheNewsContentParser();
     this.env = env;
   }
 
@@ -72,7 +75,7 @@ export class BeehiivService {
     const url = new URL(`${this.baseUrl}/publications/${publicationId}/posts`);
     url.searchParams.append('page', '0');
     url.searchParams.append('limit', '1'); // Only fetch the latest
-    url.searchParams.append('order_by', 'publish_date');
+    url.searchParams.append('order_by', 'created_timestamp');
     url.searchParams.append('direction', 'desc');
     url.searchParams.append('expand', expand);
 
@@ -361,11 +364,39 @@ export class BeehiivService {
         // Check if post already exists
         const existingPost = await this.beehiivRepository.findPostByBeehiivId(latestPost.id);
         if (existingPost) {
-          return {
-            success: true,
-            message: `Post already exists: ${latestPost.title}`,
-            post: existingPost,
-          };
+          // Try to update the article anyway (upsert will check if it's protected)
+          try {
+            const postResponse = {
+              id: latestPost.id,
+              title: latestPost.title,
+              subtitle: latestPost.subtitle,
+              subject_line: latestPost.subject_line,
+              preview_text: latestPost.preview_text,
+              slug: latestPost.slug,
+              status: latestPost.status,
+              content: latestPost.content,
+              thumbnail_url: latestPost.thumbnail_url,
+              web_url: latestPost.web_url,
+              content_tags: latestPost.content_tags,
+              meta_default_title: latestPost.meta_default_title,
+              meta_default_description: latestPost.meta_default_description
+            };
+
+            await this.convertBeehiivPostToArticle(postResponse, existingPost.id);
+
+            return {
+              success: true,
+              message: `Post updated: ${latestPost.title}`,
+              post: existingPost,
+            };
+          } catch (updateError) {
+            console.log(`⚠️ Could not update article for post ${latestPost.title}:`, updateError);
+            return {
+              success: true,
+              message: `Post already exists (article protected): ${latestPost.title}`,
+              post: existingPost,
+            };
+          }
         }
         
         // Save the post to database
@@ -406,13 +437,24 @@ export class BeehiivService {
       console.log(`📰 Found post: "${latestPost.title}" (ID: ${latestPost.id})`);
 
       // Check if post already exists
-      const exists = await this.checkPostExists(latestPost);
-      
-      if (exists) {
-        return {
-          success: true,
-          message: `Post "${latestPost.title}" already exists, skipping`,
-        };
+      const existingPost = await this.beehiivRepository.findPostByBeehiivId(latestPost.id);
+
+      if (existingPost) {
+        // Try to update the article anyway (upsert will check if it's protected)
+        try {
+          await this.convertBeehiivPostToArticle(latestPost, existingPost.id);
+
+          return {
+            success: true,
+            message: `Post updated: "${latestPost.title}"`,
+          };
+        } catch (updateError) {
+          console.log(`⚠️ Could not update article for post ${latestPost.title}:`, updateError);
+          return {
+            success: true,
+            message: `Post "${latestPost.title}" already exists (article protected)`,
+          };
+        }
       }
 
       console.log(`💾 Saving new post: "${latestPost.title}"`);
@@ -540,10 +582,16 @@ export class BeehiivService {
       
       // Convert to article
       try {
+        console.log(`🔄 Converting BeehIV post "${post.title}" to article...`);
         const article = await this.convertBeehiivPostToArticle(post, result.id);
-        console.log(`📝 Article created from BeehIV post:`, article.id);
+        console.log(`✅ Article created from BeehIV post: ${article.id} - "${article.title}"`);
       } catch (articleError) {
-        console.error(`⚠️ Error creating article from BeehIV post:`, articleError);
+        console.error(`❌ CRITICAL ERROR: Failed to create article from BeehIV post "${post.title}":`, {
+          error: articleError,
+          postId: result.id,
+          beehiivId: post.id,
+          postTitle: post.title
+        });
         // Don't throw - the post was saved successfully
       }
       
@@ -555,24 +603,59 @@ export class BeehiivService {
   }
 
   /**
-   * Convert BeehIV post to article
+   * Convert BeehIV post to article (public method for testing)
    */
   async convertBeehiivPostToArticle(post: BeehiivPostResponse, beehiivPostId: string) {
     try {
       console.log(`🔄 Converting BeehIV post to article: ${post.title}`);
-      
+      console.log(`📋 Post data:`, {
+        beehiivId: post.id,
+        title: post.title,
+        hasRssContent: !!(post.content?.free?.rss),
+        rssLength: post.content?.free?.rss?.length || 0
+      });
+
       // Parse RSS content to extract structured content
       const rssContent = post.content?.free?.rss || '';
-      const parsedContent = this.contentParser.parseRssContent(rssContent);
-      
+      console.log(`📰 RSS Content length: ${rssContent.length} chars`);
+
+      let parsedContent;
+      try {
+        // Use The News specific parser
+        const theNewsResult = this.theNewsParser.parseTheNewsContent(rssContent);
+        parsedContent = {
+          blocks: theNewsResult.blocks,
+          metadata: theNewsResult.metadata,
+          sections: theNewsResult.sections
+        };
+        console.log(`📊 The News parsed content: ${parsedContent.blocks.length} blocks, ${theNewsResult.sections.length} sections`);
+        console.log(`📰 Sections found: ${theNewsResult.sections.map(s => s.category).join(', ')}`);
+      } catch (parseError) {
+        console.error(`❌ Error parsing RSS content with The News parser, falling back to general parser:`, parseError);
+        try {
+          parsedContent = this.contentParser.parseRssContent(rssContent);
+          console.log(`📊 Fallback parsed content: ${parsedContent.blocks.length} blocks`);
+        } catch (fallbackError) {
+          console.error(`❌ Error with fallback parser:`, fallbackError);
+          parsedContent = { blocks: [], sections: [], metadata: { wordCount: 0, readingTime: 1, hasImages: false, hasSections: false } };
+        }
+      }
+
       // Create article data
+      const baseSlug = post.slug || this.generateSlug(post.title || 'untitled');
+      const uniqueSlug = await this.generateUniqueSlug(baseSlug, beehiivPostId);
+
       const articleData = {
         id: generateId(),
         title: post.title || 'Untitled',
-        slug: post.slug || this.generateSlug(post.title || 'untitled'),
+        slug: uniqueSlug,
         content: parsedContent.blocks,
         excerpt: post.preview_text || this.extractExcerpt(parsedContent.blocks),
         status: this.mapBeehiivStatus(post.status),
+        // Auto-detect category from The News sections
+        category: parsedContent.sections && parsedContent.sections.length > 0 ?
+          this.theNewsParser.detectMainCategory(parsedContent.sections) :
+          this.detectCategoryFromContent(post.title, parsedContent.blocks),
         source: 'beehiiv' as const,
         newsletter: post.subject_line || null,
         featuredImage: post.thumbnail_url || null,
@@ -588,13 +671,27 @@ export class BeehiivService {
         beehiivPostId: beehiivPostId,
       };
 
-      // Create article in database
-      const article = await this.articleRepository.create(articleData);
-      console.log(`✅ Article created successfully: ${article.id}`);
-      
+      console.log(`💾 Creating article with data:`, {
+        id: articleData.id,
+        title: articleData.title,
+        slug: articleData.slug,
+        source: articleData.source,
+        beehiivPostId: articleData.beehiivPostId,
+        blocksCount: articleData.content.length
+      });
+
+      // Create or update article in database using upsert
+      const article = await this.articleRepository.upsert(articleData);
+      console.log(`✅ Article upserted successfully: ${article.id}`);
+
       return article;
     } catch (error) {
-      console.error(`❌ Error converting BeehIV post to article:`, error);
+      console.error(`❌ Error converting BeehIV post to article:`, {
+        error: error,
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+        postTitle: post.title,
+        beehiivPostId: beehiivPostId
+      });
       throw error;
     }
   }
@@ -612,16 +709,79 @@ export class BeehiivService {
   }
 
   /**
+   * Generate unique slug by checking existing articles
+   */
+  private async generateUniqueSlug(baseSlug: string, beehiivPostId: string): Promise<string> {
+    try {
+      // First check if we're updating an existing article
+      const existingArticle = await this.articleRepository.findByBeehiivPostId(beehiivPostId);
+      if (existingArticle) {
+        // If updating, keep the same slug
+        console.log(`🔄 Keeping existing slug for update: ${existingArticle.slug}`);
+        return existingArticle.slug;
+      }
+
+      // Check if base slug is available
+      const existingBySlug = await this.articleRepository.findBySlug(baseSlug);
+      if (!existingBySlug) {
+        console.log(`✅ Base slug available: ${baseSlug}`);
+        return baseSlug;
+      }
+
+      // Generate unique slug by appending timestamp or counter
+      let counter = 1;
+      let uniqueSlug = `${baseSlug}-${Date.now()}`;
+
+      // Fallback: try with incremental counter if timestamp fails
+      while (await this.articleRepository.findBySlug(uniqueSlug)) {
+        uniqueSlug = `${baseSlug}-${counter++}`;
+        if (counter > 100) break; // Safety valve
+      }
+
+      console.log(`🔢 Generated unique slug: ${uniqueSlug}`);
+      return uniqueSlug;
+    } catch (error) {
+      console.error('❌ Error generating unique slug, using fallback:', error);
+      return `${baseSlug}-${Date.now()}`;
+    }
+  }
+
+  /**
    * Extract excerpt from content blocks
    */
   private extractExcerpt(blocks: any[]): string {
-    // Find first text block and extract first 150 characters
+    // Find first paragraph block and extract first 150 characters
     for (const block of blocks) {
-      if (block.type === 'text' && block.content) {
-        return block.content.substring(0, 150).trim() + '...';
+      if ((block.type === 'paragraph' || block.type === 'text') && block.data?.text) {
+        return block.data.text.substring(0, 150).trim() + '...';
       }
     }
     return '';
+  }
+
+  /**
+   * Detect category from content as fallback
+   */
+  private detectCategoryFromContent(title: string, blocks: any[]): string {
+    const content = (title + ' ' + blocks
+      .filter(b => b.data?.text)
+      .map(b => b.data.text)
+      .join(' ')).toLowerCase();
+
+    if (content.includes('brasil') || content.includes('governo') || content.includes('política')) {
+      return 'brasil';
+    }
+    if (content.includes('mundo') || content.includes('internacional') || content.includes('guerra')) {
+      return 'internacional';
+    }
+    if (content.includes('economia') || content.includes('mercado') || content.includes('dólar')) {
+      return 'economia';
+    }
+    if (content.includes('tecnologia') || content.includes('tech') || content.includes('ia')) {
+      return 'tecnologia';
+    }
+
+    return 'geral';
   }
 
   /**

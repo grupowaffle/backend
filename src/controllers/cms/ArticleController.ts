@@ -4,6 +4,8 @@ import { z } from 'zod';
 import { ArticleRepository } from '../../repositories';
 import { NewArticle } from '../../config/db/schema';
 import { generateId } from '../../lib/cuid';
+import { AuthorSyncService } from '../../services/AuthorSyncService';
+import { getDrizzleClient } from '../../config/db';
 
 // Validation schemas
 const createArticleSchema = z.object({
@@ -18,6 +20,7 @@ const createArticleSchema = z.object({
   seoDescription: z.string().optional(),
   seoKeywords: z.array(z.string()).optional(),
   categoryId: z.string().optional(),
+  newsletter: z.string().optional(),
   tags: z.array(z.string()).optional(),
   authorId: z.string().optional(),
   featuredImageId: z.string().optional(),
@@ -49,28 +52,76 @@ const listArticlesSchema = z.object({
 export class ArticleController {
   private app: Hono;
   private articleRepository: ArticleRepository;
+  private authorSyncService: AuthorSyncService;
 
-  constructor(articleRepository: ArticleRepository) {
+  constructor(articleRepository: ArticleRepository, env: any) {
     this.app = new Hono();
     this.articleRepository = articleRepository;
+    const db = getDrizzleClient(env);
+    this.authorSyncService = new AuthorSyncService(db);
     this.setupRoutes();
   }
 
   private setupRoutes() {
+    // Get complete article statistics (DEVE VIR ANTES DA ROTA /:id)
+    this.app.get('/stats', async (c) => {
+      try {
+        const stats = await this.articleRepository.getCompleteStats();
+
+        return c.json({
+          success: true,
+          data: stats,
+        });
+      } catch (error) {
+        console.error('Error fetching article stats:', error);
+        return c.json({
+          success: false,
+          error: 'Failed to fetch article stats',
+        }, 500);
+      }
+    });
+
+    // Get articles count by status (DEVE VIR ANTES DA ROTA /:id)
+    this.app.get('/stats/status-count', async (c) => {
+      try {
+        const statusCounts = await this.articleRepository.getCountByStatus();
+
+        return c.json({
+          success: true,
+          data: statusCounts,
+        });
+      } catch (error) {
+        console.error('Error fetching status counts:', error);
+        return c.json({
+          success: false,
+          error: 'Failed to fetch status counts',
+        }, 500);
+      }
+    });
+
     // Create article
     this.app.post('/', zValidator('json', createArticleSchema), async (c) => {
       try {
         const data = c.req.valid('json');
-        
+        const user = c.get('user');
+
         // Generate slug if not provided
         if (!data.slug) {
           data.slug = this.generateSlug(data.title);
+        }
+
+        // Ensure author exists for the current user
+        let authorId = data.authorId;
+        if (!authorId && user?.id) {
+          authorId = await this.authorSyncService.getAuthorIdForUser(user.id.toString());
         }
 
         // Parse dates
         const articleData: NewArticle = {
           ...data,
           id: generateId(),
+          authorId: authorId || null,
+          editorId: user?.id?.toString() || null,
           publishedAt: data.publishedAt ? new Date(data.publishedAt) : null,
           scheduledFor: data.scheduledFor ? new Date(data.scheduledFor) : null,
           featuredUntil: data.featuredUntil ? new Date(data.featuredUntil) : null,
@@ -89,6 +140,72 @@ export class ArticleController {
           success: false,
           error: error instanceof Error ? error.message : 'Failed to create article',
         }, 400);
+      }
+    });
+
+    // Export articles (DEVE VIR ANTES DA ROTA /:id)
+    this.app.get('/export', zValidator('query', listArticlesSchema.extend({
+      format: z.enum(['csv', 'xlsx', 'pdf']).default('csv'),
+    })), async (c) => {
+      try {
+        const params = c.req.valid('query');
+
+        const filters = {
+          status: params.status,
+          categoryId: params.categoryId,
+          authorId: params.authorId,
+          source: params.source,
+          newsletter: params.newsletter,
+          isFeatured: params.isFeatured,
+          featuredPosition: params.featuredPosition,
+          featuredCategory: params.featuredCategory,
+          search: params.search,
+        };
+
+        // Remove undefined values
+        Object.keys(filters).forEach(key => {
+          if (filters[key as keyof typeof filters] === undefined) {
+            delete filters[key as keyof typeof filters];
+          }
+        });
+
+        // Get all articles for export (no pagination)
+        const result = await this.articleRepository.list({
+          page: 1,
+          limit: 10000, // Large limit to get all articles
+          sortBy: params.sortBy,
+          sortOrder: params.sortOrder,
+          filters,
+          includeRelations: true, // Include relations for better export data
+        });
+
+        // Generate export content based on format
+        if (params.format === 'csv') {
+          const csvContent = this.generateCSV(result.data);
+          
+          return new Response(csvContent, {
+            headers: {
+              'Content-Type': 'text/csv;charset=utf-8',
+              'Content-Disposition': `attachment; filename="artigos-${new Date().toISOString().split('T')[0]}.csv"`,
+            },
+          });
+        } else {
+          // For now, default to CSV for other formats
+          const csvContent = this.generateCSV(result.data);
+          
+          return new Response(csvContent, {
+            headers: {
+              'Content-Type': 'text/csv;charset=utf-8',
+              'Content-Disposition': `attachment; filename="artigos-${new Date().toISOString().split('T')[0]}.csv"`,
+            },
+          });
+        }
+      } catch (error) {
+        console.error('Error exporting articles:', error);
+        return c.json({
+          success: false,
+          error: 'Failed to export articles',
+        }, 500);
       }
     });
 
@@ -125,10 +242,19 @@ export class ArticleController {
       try {
         const id = c.req.param('id');
         const data = c.req.valid('json');
+        const user = c.get('user');
+
+        // Ensure author exists for the current user if no authorId provided
+        let authorId = data.authorId;
+        if (!authorId && user?.id) {
+          authorId = await this.authorSyncService.getAuthorIdForUser(user.id.toString());
+        }
 
         // Parse dates if provided
         const updateData: Partial<NewArticle> = {
           ...data,
+          authorId: authorId || data.authorId, // Use the ensured author ID
+          editorId: user?.id?.toString() || null, // Track who edited
         };
 
         if (data.publishedAt) {
@@ -351,23 +477,6 @@ export class ArticleController {
       }
     });
 
-    // Get articles count by status
-    this.app.get('/stats/status-count', async (c) => {
-      try {
-        const statusCounts = await this.articleRepository.getCountByStatus();
-
-        return c.json({
-          success: true,
-          data: statusCounts,
-        });
-      } catch (error) {
-        console.error('Error fetching status counts:', error);
-        return c.json({
-          success: false,
-          error: 'Failed to fetch status counts',
-        }, 500);
-      }
-    });
 
     // Publish article
     this.app.patch('/:id/publish', async (c) => {
@@ -518,6 +627,57 @@ export class ArticleController {
       .replace(/\s+/g, '-') // Replace spaces with hyphens
       .replace(/-+/g, '-') // Remove multiple consecutive hyphens
       .substring(0, 100); // Limit length
+  }
+
+  /**
+   * Generate CSV content from articles array
+   */
+  private generateCSV(articles: any[]): string {
+    // CSV headers
+    const headers = [
+      'ID',
+      'Título',
+      'Slug',
+      'Status',
+      'Categoria',
+      'Autor',
+      'Visualizações',
+      'Likes',
+      'Shares',
+      'Criado em',
+      'Publicado em',
+      'Resumo'
+    ];
+
+    // Generate CSV rows
+    const rows = articles.map(item => {
+      const article = item.article || item;
+      const category = item.category;
+      const author = item.author;
+      
+      return [
+        article.id || '',
+        (article.title || '').replace(/"/g, '""'), // Escape quotes
+        article.slug || '',
+        article.status || '',
+        category?.name || '',
+        author?.name || '',
+        article.views || 0,
+        article.likes || 0,
+        article.shares || 0,
+        article.createdAt ? new Date(article.createdAt).toLocaleDateString('pt-BR') : '',
+        article.publishedAt ? new Date(article.publishedAt).toLocaleDateString('pt-BR') : '',
+        (article.excerpt || '').replace(/"/g, '""').substring(0, 200) // Limit excerpt and escape quotes
+      ];
+    });
+
+    // Combine headers and rows
+    const csvContent = [headers, ...rows]
+      .map(row => row.map(field => `"${field}"`).join(','))
+      .join('\n');
+
+    // Add BOM for UTF-8 to ensure proper encoding in Excel
+    return '\uFEFF' + csvContent;
   }
 
   /**

@@ -33,6 +33,42 @@ export class MediaControllerSimple {
   }
 
   private setupRoutes() {
+    // Servir arquivo do R2 (endpoint público) - DEVE VIR ANTES DO MIDDLEWARE DE AUTH
+    this.app.get('/serve/*', async (c) => {
+      try {
+        // Capturar o caminho completo após /serve/
+        const url = new URL(c.req.url);
+        const pathAfterServe = url.pathname.replace('/api/cms/media/serve/', '');
+        const fileKey = decodeURIComponent(pathAfterServe);
+        
+        console.log(`📥 Serving file: ${fileKey}`);
+        console.log(`📥 Full URL: ${url.pathname}`);
+
+        // Buscar arquivo do R2
+        const file = await this.r2Service.getFileFromR2(fileKey);
+        
+        if (!file) {
+          return c.json({ error: 'File not found' }, 404);
+        }
+
+        // Configurar headers apropriados
+        const headers = new Headers();
+        headers.set('Content-Type', file.httpMetadata?.contentType || 'application/octet-stream');
+        headers.set('Cache-Control', 'public, max-age=31536000'); // Cache de 1 ano
+        
+        if (file.size) {
+          headers.set('Content-Length', file.size.toString());
+        }
+
+        // Retornar o stream do arquivo
+        return new Response(file.body, { headers });
+
+      } catch (error) {
+        console.error('Error serving file:', error);
+        return c.json({ error: 'Failed to serve file' }, 500);
+      }
+    });
+
     // Middleware de autenticação
     this.app.use('/upload', authMiddleware);
     this.app.use('/search', authMiddleware);
@@ -61,7 +97,9 @@ export class MediaControllerSimple {
         console.log(`📤 Uploading file: ${file.name} (${file.size} bytes) by ${user.email}`);
 
         // Upload para R2 seguindo padrão waffle
+        console.log('🔧 Starting R2 upload...');
         const url = await this.uploadToR2(file, file.name, c.env);
+        console.log('✅ R2 upload completed, URL:', url);
 
         // Salvar metadados no banco
         const mediaRecord = await this.db
@@ -495,37 +533,6 @@ export class MediaControllerSimple {
       }
     });
 
-    // Servir arquivo do R2 (endpoint público)
-    this.app.get('/serve/*', async (c) => {
-      try {
-        const fileKey = c.req.param('*'); // Captura todo o caminho após /serve/
-        
-        console.log(`📥 Serving file: ${fileKey}`);
-
-        // Buscar arquivo do R2
-        const file = await this.r2Service.getFileFromR2(fileKey);
-        
-        if (!file) {
-          return c.json({ error: 'File not found' }, 404);
-        }
-
-        // Configurar headers apropriados
-        const headers = new Headers();
-        headers.set('Content-Type', file.httpMetadata?.contentType || 'application/octet-stream');
-        headers.set('Cache-Control', 'public, max-age=31536000'); // Cache de 1 ano
-        
-        if (file.size) {
-          headers.set('Content-Length', file.size.toString());
-        }
-
-        // Retornar o stream do arquivo
-        return new Response(file.body, { headers });
-
-      } catch (error) {
-        console.error('Error serving file:', error);
-        return c.json({ error: 'Failed to serve file' }, 500);
-      }
-    });
 
     // Health check
     this.app.get('/health', async (c) => {
@@ -554,12 +561,29 @@ export class MediaControllerSimple {
    */
   private async uploadToR2(file: File, fileName: string, env: any): Promise<string> {
     const key = `uploads/${Date.now()}-${fileName}`;
+    console.log('🔧 R2 upload - Key:', key);
+    console.log('🔧 R2 upload - File size:', file.size);
+    console.log('🔧 R2 upload - File type:', file.type);
+    console.log('🔧 R2 upload - FILE_STORAGE available:', !!env.FILE_STORAGE);
 
-    await env.FILE_STORAGE.put(key, file.stream(), {
-      httpMetadata: {
-        contentType: file.type
+    try {
+      // Verificar se FILE_STORAGE está disponível
+      if (!env.FILE_STORAGE) {
+        throw new Error('FILE_STORAGE not available in environment');
       }
-    });
+
+      await env.FILE_STORAGE.put(key, file.stream(), {
+        httpMetadata: {
+          contentType: file.type
+        }
+      });
+      console.log('✅ R2 upload successful for key:', key);
+    } catch (error) {
+      console.error('❌ R2 upload failed:', error);
+      console.error('❌ Error details:', error.message);
+      console.error('❌ Error stack:', error.stack);
+      throw error;
+    }
 
     // Retorna URL via Worker (sem exposição direta do bucket)
     return `/api/cms/media/serve/${key}`;

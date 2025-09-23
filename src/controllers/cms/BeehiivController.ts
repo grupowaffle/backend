@@ -8,6 +8,60 @@ import { getDrizzleClient } from '../../config/db';
 import { Env } from '../../config/types/common';
 import { generateId } from '../../lib/cuid';
 
+// Mapping of all available newsletters
+const NEWSLETTERS: Record<string, { id: string; name: string; description: string }> = {
+  thebizness: {
+    id: 'pub_98577126-2994-4111-bc86-f60974108b94',
+    name: 'The Bizness',
+    description: 'Business insights and market trends'
+  },
+  thenews: {
+    id: 'pub_ce78b549-5923-439b-be24-3f24c454bc12',
+    name: 'The News',
+    description: 'Latest news and current events'
+  },
+  thestories: {
+    id: 'pub_e6f2edcf-0484-47ad-b6f2-89a866ccadc8',
+    name: 'The Stories',
+    description: 'Compelling stories and narratives'
+  },
+  thejobs: {
+    id: 'pub_b0f0dc48-5946-40a5-b2b6-b245a1a0e680',
+    name: 'The Jobs',
+    description: 'Career opportunities and job market insights'
+  },
+  thechamps: {
+    id: 'pub_72a981c0-3a09-4a7c-b374-dbea5b69925c',
+    name: 'The Champs',
+    description: 'Champions and success stories'
+  },
+  rising: {
+    id: 'pub_89324c54-1b5f-4200-85e7-e199d56c76e3',
+    name: 'Rising',
+    description: 'Emerging trends and rising stars'
+  },
+  goget: {
+    id: 'pub_3f18517c-9a0b-487e-b1c3-804c71fa6285',
+    name: 'GoGet',
+    description: 'Productivity and achievement tips'
+  },
+  healthtimes: {
+    id: 'pub_f11d861b-9b39-428b-a381-af3f07ef96c9',
+    name: 'Health Times',
+    description: 'Health and wellness insights'
+  },
+  dollarbill: {
+    id: 'pub_87b5253f-5fac-42d9-bb03-d100f7d434aa',
+    name: 'Dollar Bill',
+    description: 'Financial advice and money management'
+  },
+  trendreport: {
+    id: 'pub_f41c4c52-beb8-4cc0-b8c0-02bb6ac2353c',
+    name: 'Trend Report',
+    description: 'Market trends and analysis'
+  }
+};
+
 // Validation schemas
 const syncPublicationSchema = z.object({
   publicationId: z.string().min(1, 'Publication ID is required'),
@@ -81,6 +135,171 @@ export class BeehiivController {
   }
 
   private setupRoutes() {
+    // Get all available newsletters
+    this.app.get('/newsletters', async (c) => {
+      try {
+        console.log('📰 Getting all available newsletters...');
+
+        // Transform newsletters object to array
+        const newsletters = Object.entries(NEWSLETTERS).map(([key, newsletter]) => ({
+          key,
+          id: newsletter.id,
+          name: newsletter.name,
+          description: newsletter.description,
+          configured: !!this.env.BEEHIIV_API_KEY,
+          status: 'available'
+        }));
+
+        console.log(`✅ Found ${newsletters.length} newsletters`);
+
+        return c.json({
+          success: true,
+          data: newsletters,
+          total: newsletters.length,
+        });
+      } catch (error) {
+        console.error('❌ Error listing newsletters:', error);
+        return c.json({
+          success: false,
+          error: 'Failed to list newsletters',
+        }, 500);
+      }
+    });
+
+    // Get newsletter details with live stats
+    this.app.get('/newsletters/:key', async (c) => {
+      try {
+        const key = c.req.param('key');
+        const newsletter = NEWSLETTERS[key];
+
+        if (!newsletter) {
+          return c.json({
+            success: false,
+            error: 'Newsletter not found',
+          }, 404);
+        }
+
+        if (!this.env.BEEHIIV_API_KEY) {
+          return c.json({
+            success: true,
+            data: {
+              key,
+              ...newsletter,
+              configured: false,
+              status: 'not_configured',
+              stats: { subscribers: 0, openRate: 0, clickRate: 0 }
+            },
+          });
+        }
+
+        // Fetch live stats from Beehiiv API
+        try {
+          const response = await fetch(`https://api.beehiiv.com/v2/publications/${newsletter.id}`, {
+            headers: {
+              'Authorization': `Bearer ${this.env.BEEHIIV_API_KEY}`,
+              'Content-Type': 'application/json',
+            },
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            const pub = data.data;
+
+            return c.json({
+              success: true,
+              data: {
+                key,
+                id: newsletter.id,
+                name: newsletter.name,
+                description: newsletter.description,
+                configured: true,
+                status: pub.status === 'active' ? 'active' : 'paused',
+                subscribers: pub.stats?.active_subscribers || 0,
+                stats: {
+                  openRate: pub.stats?.average_open_rate || 0,
+                  clickRate: pub.stats?.average_click_rate || 0,
+                },
+                lastSync: new Date().toISOString(),
+              },
+            });
+          }
+        } catch (apiError) {
+          console.error(`❌ Error fetching ${newsletter.name}:`, apiError);
+        }
+
+        // Return basic info if API fails
+        return c.json({
+          success: true,
+          data: {
+            key,
+            ...newsletter,
+            configured: true,
+            status: 'error',
+            stats: { subscribers: 0, openRate: 0, clickRate: 0 }
+          },
+        });
+
+      } catch (error) {
+        console.error('❌ Error getting newsletter details:', error);
+        return c.json({
+          success: false,
+          error: 'Failed to get newsletter details',
+        }, 500);
+      }
+    });
+
+    // Test newsletter connection
+    this.app.get('/newsletters/:key/test', async (c) => {
+      try {
+        const key = c.req.param('key');
+        const newsletter = NEWSLETTERS[key];
+
+        if (!newsletter) {
+          return c.json({
+            success: false,
+            message: 'Newsletter not found',
+          });
+        }
+
+        if (!this.env.BEEHIIV_API_KEY) {
+          return c.json({
+            success: false,
+            message: 'API key not configured in backend',
+          });
+        }
+
+        // Test connection to specific newsletter
+        const response = await fetch(`https://api.beehiiv.com/v2/publications/${newsletter.id}`, {
+          headers: {
+            'Authorization': `Bearer ${this.env.BEEHIIV_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (!response.ok) {
+          return c.json({
+            success: false,
+            message: `Failed to connect to ${newsletter.name}: ${response.statusText}`,
+          });
+        }
+
+        const data = await response.json();
+        const pub = data.data;
+
+        return c.json({
+          success: true,
+          message: `✅ Connected to ${newsletter.name} - ${pub.stats?.active_subscribers || 0} subscribers`,
+        });
+
+      } catch (error) {
+        console.error('❌ Error testing newsletter:', error);
+        return c.json({
+          success: false,
+          message: 'Connection test failed',
+        });
+      }
+    });
+
     // Get all publications
     this.app.get('/publications', async (c) => {
       try {
@@ -303,13 +522,13 @@ export class BeehiivController {
       try {
         // Stop first if running
         this.schedulerService.stop();
-        
+
         // Wait a moment
         await new Promise(resolve => setTimeout(resolve, 1000));
-        
+
         // Start
         this.schedulerService.start();
-        
+
         return c.json({
           success: true,
           message: 'Scheduler started',
@@ -319,6 +538,111 @@ export class BeehiivController {
         return c.json({
           success: false,
           error: 'Failed to start scheduler',
+        }, 500);
+      }
+    });
+
+    // Test conversion endpoint for debugging
+    this.app.post('/test-conversion', async (c) => {
+      try {
+        const { beehiivPostId } = await c.req.json();
+
+        if (!beehiivPostId) {
+          return c.json({
+            success: false,
+            error: 'beehiivPostId is required'
+          }, 400);
+        }
+
+        console.log(`🧪 Testing conversion for BeehIV post: ${beehiivPostId}`);
+
+        // Get the BeehIV post from database
+        const beehiivPost = await this.beehiivRepository.findPostByBeehiivId(beehiivPostId);
+
+        if (!beehiivPost) {
+          return c.json({
+            success: false,
+            error: 'BeehIV post not found'
+          }, 404);
+        }
+
+        // Convert RSS content to BeehiivPostResponse format
+        const postResponse = {
+          id: beehiivPost.beehiivId,
+          title: beehiivPost.title,
+          subtitle: beehiivPost.subtitle,
+          subject_line: beehiivPost.subjectLine,
+          preview_text: beehiivPost.previewText,
+          slug: beehiivPost.slug,
+          status: beehiivPost.status,
+          content: {
+            free: {
+              rss: beehiivPost.rssContent || ''
+            }
+          },
+          thumbnail_url: beehiivPost.thumbnailUrl,
+          web_url: beehiivPost.webUrl,
+          content_tags: beehiivPost.contentTags,
+          meta_default_title: beehiivPost.metaTitle,
+          meta_default_description: beehiivPost.metaDescription
+        };
+
+        console.log(`📊 Converting post "${postResponse.title}" with RSS length: ${postResponse.content.free.rss.length}`);
+
+        // Force conversion to article
+        const article = await this.beehiivService.convertBeehiivPostToArticle(postResponse, beehiivPost.id);
+
+        return c.json({
+          success: true,
+          message: 'Conversion test completed',
+          data: {
+            beehiivPost: {
+              id: beehiivPost.id,
+              title: beehiivPost.title,
+              rssLength: beehiivPost.rssContent?.length || 0
+            },
+            article: {
+              id: article.id,
+              title: article.title,
+              slug: article.slug,
+              category: article.category,
+              blocksCount: article.content?.length || 0
+            }
+          }
+        });
+
+      } catch (error) {
+        console.error('❌ Error in test conversion:', error);
+        return c.json({
+          success: false,
+          error: error instanceof Error ? error.message : 'Conversion test failed',
+          details: error
+        }, 500);
+      }
+    });
+
+    // Sync all newsletters (simplified version)
+    this.app.post('/sync-all', async (c) => {
+      try {
+        console.log('🚀 Manual sync-all triggered');
+
+        // Use the existing sync/latest endpoint for all publications
+        const result = await this.beehiivService.syncLatestFromAllPublications();
+
+        return c.json({
+          success: result.success,
+          synced: result.results.filter(r => r.success).length,
+          failed: result.results.filter(r => !r.success).length,
+          message: `Sync completed: ${result.results.filter(r => r.success).length} successful, ${result.results.filter(r => !r.success).length} failed`,
+          data: result.results,
+        });
+      } catch (error) {
+        console.error('❌ Error in sync-all:', error);
+        return c.json({
+          success: false,
+          synced: 0,
+          failed: 0,
+          message: error instanceof Error ? error.message : 'Sync failed',
         }, 500);
       }
     });

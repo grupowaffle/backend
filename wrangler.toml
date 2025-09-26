@@ -5,16 +5,15 @@ compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat_v2"]
 
 # R2 Bucket bindings (seguindo padrão do projeto waffle)
-# Temporariamente comentado até criar os buckets
-# [[r2_buckets]]
-# binding = "FILE_STORAGE"
-# bucket_name = "waffle-files"
-# preview_bucket_name = "waffle-files"
+[[r2_buckets]]
+binding = "FILE_STORAGE"
+bucket_name = "waffle-files"
+preview_bucket_name = "waffle-files"
 
-# [[r2_buckets]]
-# binding = "ASSETS"
-# bucket_name = "thenews-assets"
-# preview_bucket_name = "thenews-assets-dev"
+[[r2_buckets]]
+binding = "ASSETS"
+bucket_name = "thenews-assets"
+preview_bucket_name = "thenews-assets-dev"
 
 # browser = { binding = "BROWSER" }
 

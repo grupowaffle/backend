@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { Env, UserData } from '../../config/types/common';
 import { authMiddleware, roleMiddleware } from '../../middlewares/auth';
 import { AuthHandlers } from '../../handlers/authHandlers';
-import { AuthService } from '../../services/AuthService';
+import { AuthService } from '../../services/authService';
 
 export type AuthAppType = Hono<{
   Bindings: Env;

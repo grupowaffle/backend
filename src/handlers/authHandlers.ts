@@ -1,7 +1,7 @@
 import { Context } from 'hono';
 import { sign } from 'hono/jwt';
 import { Env, UserData } from '../config/types/common';
-import { AuthService } from '../services/AuthService';
+import { AuthService } from '../services/authService';
 import { LoginRequest, LoginResponse, RegisterRequest, RegisterResponse, ProfileResponse, CloudflareD1Client } from '../config/types/auth';
 
 /**

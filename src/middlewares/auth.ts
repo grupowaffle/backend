@@ -1,7 +1,7 @@
 import { Context, Next } from 'hono';
 import { verify } from 'hono/jwt';
 import { Env, UserData } from '../config/types/common';
-import { AuthService } from '../services/AuthService';
+import { AuthService } from '../services/authService';
 import { JWTPayload, CloudflareD1Client } from '../config/types/auth';
 
 /**

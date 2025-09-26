@@ -16,3 +16,41 @@ wrangler.toml.backup
 
 # Logs
 *.log
+
+# Documentation files
+*.md
+!README.md
+
+# Scripts and test files
+*.js
+!src/**/*.js
+!drizzle.config.js
+!wrangler.toml
+
+# HTML files
+*.html
+
+# JSON files (except package files)
+*.json
+!package.json
+!package-lock.json
+!tsconfig.json
+!drizzle.config.ts
+
+# Backup files
+*.backup
+*.bak
+
+# Temporary files
+*.tmp
+*.temp
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS generated files
+Thumbs.db
+ehthumbs.db

@@ -63,6 +63,45 @@ export class ArticleController {
   }
 
   private setupRoutes() {
+    // Debug endpoint (temporary - remove in production)
+    this.app.get('/debug', async (c) => {
+      try {
+        const result = await this.articleRepository.list({
+          page: 1,
+          limit: 100,
+          filters: {},
+          includeRelations: false,
+        });
+
+        const bySource = result.data.reduce((acc, item) => {
+          const source = item.source || 'manual';
+          acc[source] = (acc[source] || 0) + 1;
+          return acc;
+        }, {} as Record<string, number>);
+
+        return c.json({
+          success: true,
+          data: {
+            total: result.pagination.total,
+            bySource,
+            articles: result.data.map(article => ({
+              id: article.id,
+              title: article.title,
+              source: article.source || 'manual',
+              status: article.status,
+              createdAt: article.createdAt
+            }))
+          },
+        });
+      } catch (error) {
+        // Error in debug endpoint
+        return c.json({
+          success: false,
+          error: 'Failed to fetch debug data',
+        }, 500);
+      }
+    });
+
     // Get complete article statistics (DEVE VIR ANTES DA ROTA /:id)
     this.app.get('/stats', async (c) => {
       try {
@@ -73,7 +112,7 @@ export class ArticleController {
           data: stats,
         });
       } catch (error) {
-        console.error('Error fetching article stats:', error);
+        // Error fetching article stats
         return c.json({
           success: false,
           error: 'Failed to fetch article stats',
@@ -91,7 +130,7 @@ export class ArticleController {
           data: statusCounts,
         });
       } catch (error) {
-        console.error('Error fetching status counts:', error);
+        // Error fetching status counts
         return c.json({
           success: false,
           error: 'Failed to fetch status counts',
@@ -135,7 +174,7 @@ export class ArticleController {
           data: article,
         }, 201);
       } catch (error) {
-        console.error('Error creating article:', error);
+        // Error creating article
         return c.json({
           success: false,
           error: error instanceof Error ? error.message : 'Failed to create article',
@@ -201,7 +240,7 @@ export class ArticleController {
           });
         }
       } catch (error) {
-        console.error('Error exporting articles:', error);
+        // Error exporting articles
         return c.json({
           success: false,
           error: 'Failed to export articles',
@@ -229,7 +268,7 @@ export class ArticleController {
           data: article,
         });
       } catch (error) {
-        console.error('Error fetching article:', error);
+        // Error fetching article
         return c.json({
           success: false,
           error: 'Failed to fetch article',
@@ -281,7 +320,7 @@ export class ArticleController {
           data: article,
         });
       } catch (error) {
-        console.error('Error updating article:', error);
+        // Error updating article
         return c.json({
           success: false,
           error: error instanceof Error ? error.message : 'Failed to update article',
@@ -308,7 +347,7 @@ export class ArticleController {
           message: 'Article deleted successfully',
         });
       } catch (error) {
-        console.error('Error deleting article:', error);
+        // Error deleting article
         return c.json({
           success: false,
           error: 'Failed to delete article',
@@ -355,7 +394,7 @@ export class ArticleController {
           pagination: result.pagination,
         });
       } catch (error) {
-        console.error('Error listing articles:', error);
+        // Error listing articles
         return c.json({
           success: false,
           error: 'Failed to list articles',
@@ -375,7 +414,7 @@ export class ArticleController {
           data: articles,
         });
       } catch (error) {
-        console.error('Error fetching featured articles:', error);
+        // Error fetching featured articles
         return c.json({
           success: false,
           error: 'Failed to fetch featured articles',
@@ -416,7 +455,7 @@ export class ArticleController {
           data: article,
         });
       } catch (error) {
-        console.error('Error featuring article:', error);
+        // Error featuring article
         return c.json({
           success: false,
           error: 'Failed to feature article',
@@ -449,7 +488,7 @@ export class ArticleController {
           data: article,
         });
       } catch (error) {
-        console.error('Error unfeaturing article:', error);
+        // Error unfeaturing article
         return c.json({
           success: false,
           error: 'Failed to unfeature article',
@@ -469,7 +508,7 @@ export class ArticleController {
           message: 'View incremented',
         });
       } catch (error) {
-        console.error('Error incrementing views:', error);
+        // Error incrementing views
         return c.json({
           success: false,
           error: 'Failed to increment views',
@@ -489,7 +528,7 @@ export class ArticleController {
         }
 
         // Verificar se o usuário tem permissão para publicar
-        if (!['admin', 'editor-chefe', 'editor', 'developer'].includes(user.role)) {
+        if (!['admin', 'editor-chefe', 'editor', 'developer', 'super_admin'].includes(user.role)) {
           return c.json({
             success: false,
             error: 'Permissão insuficiente para publicar artigos',
@@ -541,7 +580,7 @@ export class ArticleController {
         });
 
       } catch (error) {
-        console.error('Error publishing article:', error);
+        // Error publishing article
         return c.json({
           success: false,
           error: 'Erro interno ao publicar artigo',
@@ -560,7 +599,7 @@ export class ArticleController {
         }
 
         // Verificar se o usuário tem permissão para despublicar
-        if (!['admin', 'editor-chefe', 'editor', 'developer'].includes(user.role)) {
+        if (!['admin', 'editor-chefe', 'editor', 'developer', 'super_admin'].includes(user.role)) {
           return c.json({
             success: false,
             error: 'Permissão insuficiente para despublicar artigos',
@@ -605,7 +644,7 @@ export class ArticleController {
         });
 
       } catch (error) {
-        console.error('Error unpublishing article:', error);
+        // Error unpublishing article
         return c.json({
           success: false,
           error: 'Erro interno ao despublicar artigo',

@@ -1,7 +1,8 @@
-import { BeehiivRepository, ArticleRepository } from '../repositories';
+import { BeehiivRepository, ArticleRepository, CategoryRepository } from '../repositories';
 import { DatabaseType } from '../repositories/BaseRepository';
 import { ContentParser } from './ContentParser';
-import { TheNewsContentParser } from './TheNewsContentParser';
+import { TheNewsContentParser, IndividualNews } from './TheNewsContentParser';
+import { extrairNoticiasNewsletter, type NewsletterData, type Noticia } from './NewsletterParser';
 import { generateId } from '../lib/cuid';
 
 // Types based on BeehIV API response
@@ -48,9 +49,24 @@ export interface BeehiivPublication {
   apiToken: string;
 }
 
+// Newsletter mapping - must match NEWSLETTERS in BeehiivController
+const NEWSLETTER_NAMES: Record<string, string> = {
+  'pub_98577126-2994-4111-bc86-f60974108b94': 'The Bizness',
+  'pub_ce78b549-5923-439b-be24-3f24c454bc12': 'The News',
+  'pub_e6f2edcf-0484-47ad-b6f2-89a866ccadc8': 'The Stories',
+  'pub_b0f0dc48-5946-40a5-b2b6-b245a1a0e680': 'The Jobs',
+  'pub_72a981c0-3a09-4a7c-b374-dbea5b69925c': 'The Champs',
+  'pub_89324c54-1b5f-4200-85e7-e199d56c76e3': 'Rising',
+  'pub_3f18517c-9a0b-487e-b1c3-804c71fa6285': 'GoGet',
+  'pub_f11d861b-9b39-428b-a381-af3f07ef96c9': 'Health Times',
+  'pub_87b5253f-5fac-42d9-bb03-d100f7d434aa': 'Dollar Bill',
+  'pub_f41c4c52-beb8-4cc0-b8c0-02bb6ac2353c': 'Trend Report'
+};
+
 export class BeehiivService {
   private beehiivRepository: BeehiivRepository;
   private articleRepository: ArticleRepository;
+  private categoryRepository: CategoryRepository;
   private contentParser: ContentParser;
   private theNewsParser: TheNewsContentParser;
   private baseUrl = 'https://api.beehiiv.com/v2';
@@ -59,13 +75,14 @@ export class BeehiivService {
   constructor(db: DatabaseType, env?: any) {
     this.beehiivRepository = new BeehiivRepository(db);
     this.articleRepository = new ArticleRepository(db);
+    this.categoryRepository = new CategoryRepository(db);
     this.contentParser = new ContentParser();
     this.theNewsParser = new TheNewsContentParser();
     this.env = env;
   }
 
   /**
-   * Fetch the latest post from BeehIV API (modified to get only 1 post)
+   * Fetch the latest PUBLISHED post from BeehIV API (updated to get confirmed posts only)
    */
   async fetchLatestPost(
     publicationId: string,
@@ -73,13 +90,17 @@ export class BeehiivService {
     expand: string = 'free_rss_content'
   ): Promise<BeehiivPostResponse | null> {
     const url = new URL(`${this.baseUrl}/publications/${publicationId}/posts`);
-    url.searchParams.append('page', '0');
-    url.searchParams.append('limit', '1'); // Only fetch the latest
-    url.searchParams.append('order_by', 'created_timestamp');
-    url.searchParams.append('direction', 'desc');
-    url.searchParams.append('expand', expand);
 
-    console.log(`📰 Fetching latest BeehIV post: ${url.toString()}`);
+    // Parameters to fetch only published/confirmed posts (like curl example)
+    url.searchParams.append('expand', expand);
+    url.searchParams.append('order_by', 'publish_date');
+    url.searchParams.append('limit', '2'); // Fetch 2 to have some options
+    url.searchParams.append('page', '1');
+    url.searchParams.append('direction', 'desc');
+    url.searchParams.append('status', 'confirmed'); // Only confirmed/published posts
+    url.searchParams.append('hidden_from_feed', 'all');
+
+    console.log(`📰 Fetching latest PUBLISHED BeehIV post: ${url.toString()}`);
 
     const response = await fetch(url.toString(), {
       method: 'GET',
@@ -95,11 +116,19 @@ export class BeehiivService {
     }
 
     const apiResponse: BeehiivApiResponse = await response.json();
-    return apiResponse.data[0] || null; // Return first (latest) post or null
+
+    if (apiResponse.data && apiResponse.data.length > 0) {
+      console.log(`✅ Found ${apiResponse.data.length} published posts`);
+      console.log(`📅 Latest post: "${apiResponse.data[0].title}" (${apiResponse.data[0].status})`);
+      return apiResponse.data[0]; // Return first (latest) published post
+    }
+
+    console.log(`⚠️ No published posts found for publication ${publicationId}`);
+    return null;
   }
 
   /**
-   * Fetch posts from BeehIV API (legacy method, kept for compatibility)
+   * Fetch posts from BeehIV API (updated to prefer published posts)
    */
   async fetchPosts(
     publicationId: string,
@@ -110,24 +139,28 @@ export class BeehiivService {
       orderBy?: string;
       direction?: 'asc' | 'desc';
       expand?: string;
+      status?: string;
     } = {}
   ): Promise<BeehiivApiResponse> {
     const {
-      page = 0,
-      limit = 1, // Changed default to 1 for latest only
+      page = 1,
+      limit = 2,
       orderBy = 'publish_date',
       direction = 'desc',
-      expand = 'free_rss_content'
+      expand = 'free_rss_content',
+      status = 'confirmed' // Default to confirmed/published posts
     } = options;
 
     const url = new URL(`${this.baseUrl}/publications/${publicationId}/posts`);
-    url.searchParams.append('page', page.toString());
-    url.searchParams.append('limit', limit.toString());
-    url.searchParams.append('order_by', orderBy);
-    url.searchParams.append('direction', direction);
     url.searchParams.append('expand', expand);
+    url.searchParams.append('order_by', orderBy);
+    url.searchParams.append('limit', limit.toString());
+    url.searchParams.append('page', page.toString());
+    url.searchParams.append('direction', direction);
+    url.searchParams.append('status', status);
+    url.searchParams.append('hidden_from_feed', 'all');
 
-    console.log(`Fetching BeehIV posts: ${url.toString()}`);
+    console.log(`📰 Fetching BeehIV posts (${status}): ${url.toString()}`);
 
     const response = await fetch(url.toString(), {
       method: 'GET',
@@ -226,16 +259,10 @@ export class BeehiivService {
 
   /**
    * Map BeehIV status to CMS workflow status
+   * Always returns 'in_review' for articles synced from BeehIV
    */
   private mapBeehiivStatus(beehiivStatus: string): string {
-    const statusMap: Record<string, string> = {
-      'draft': 'beehiiv_pending',        // Newsletter em rascunho -> aguarda revisão
-      'confirmed': 'beehiiv_pending',    // Newsletter confirmada -> aguarda revisão
-      'sent': 'beehiiv_pending',         // Newsletter enviada -> aguarda revisão para publicação
-      'archived': 'archived'             // Newsletter arquivada -> arquivado
-    };
-
-    return statusMap[beehiivStatus] || 'beehiiv_pending';
+    return 'draft';
   }
 
   /**
@@ -283,29 +310,35 @@ export class BeehiivService {
       let existingPub = await this.beehiivRepository.findPublicationByBeehiivId(pubId);
       
       if (existingPub) {
+        // Use friendly name from NEWSLETTER_NAMES mapping
+        const friendlyName = NEWSLETTER_NAMES[existingPub.beehiivId] || existingPub.name;
+
         publications.push({
           id: existingPub.beehiivId, // Use beehiivId instead of internal id
           beehiivId: existingPub.beehiivId,
-          name: existingPub.name,
+          name: friendlyName,
           apiToken: existingPub.apiToken || this.env.BEEHIIV_API_KEY || '',
         });
       } else {
         // Create publication in database if it doesn't exist
         console.log(`📝 Creating new publication: ${pubId}`);
         try {
+          // Use friendly name from mapping if available
+          const friendlyName = NEWSLETTER_NAMES[pubId] || `Publication ${pubId}`;
+
           const newPublication = await this.beehiivRepository.createPublication({
             id: generateId(),
             beehiivId: pubId,
-            name: `Publication ${pubId}`,
+            name: friendlyName,
             slug: pubId.toLowerCase().replace(/[^a-z0-9-]/g, '-'),
             apiToken: this.env.BEEHIIV_API_KEY || '',
             isActive: true,
           });
-          
+
           publications.push({
             id: newPublication.beehiivId, // Use beehiivId instead of internal id
             beehiivId: newPublication.beehiivId,
-            name: newPublication.name,
+            name: friendlyName,
             apiToken: newPublication.apiToken || this.env.BEEHIIV_API_KEY || '',
           });
           
@@ -364,7 +397,7 @@ export class BeehiivService {
         // Check if post already exists
         const existingPost = await this.beehiivRepository.findPostByBeehiivId(latestPost.id);
         if (existingPost) {
-          // Try to update the article anyway (upsert will check if it's protected)
+          // Try to update articles from this post (upsert will check if they're protected)
           try {
             const postResponse = {
               id: latestPost.id,
@@ -379,21 +412,30 @@ export class BeehiivService {
               web_url: latestPost.web_url,
               content_tags: latestPost.content_tags,
               meta_default_title: latestPost.meta_default_title,
-              meta_default_description: latestPost.meta_default_description
+              meta_default_description: latestPost.meta_default_description,
+              created: latestPost.created,
+              publish_date: latestPost.publish_date,
+              displayed_date: latestPost.displayed_date,
+              split_tested: latestPost.split_tested,
+              audience: latestPost.audience,
+              platform: latestPost.platform,
+              hidden_from_feed: latestPost.hidden_from_feed,
+              authors: latestPost.authors || []
             };
 
-            await this.convertBeehiivPostToArticle(postResponse, existingPost.id);
+            // Use the new method that extracts multiple articles
+            const articles = await this.convertBeehiivPostToMultipleArticles(postResponse, existingPost.id, envPublication.name);
 
             return {
               success: true,
-              message: `Post updated: ${latestPost.title}`,
+              message: `Post updated: ${latestPost.title} (${articles.length} articles)`,
               post: existingPost,
             };
           } catch (updateError) {
-            console.log(`⚠️ Could not update article for post ${latestPost.title}:`, updateError);
+            console.log(`⚠️ Could not update articles for post ${latestPost.title}:`, updateError);
             return {
               success: true,
-              message: `Post already exists (article protected): ${latestPost.title}`,
+              message: `Post already exists (articles protected): ${latestPost.title}`,
               post: existingPost,
             };
           }
@@ -403,7 +445,7 @@ export class BeehiivService {
         // Find the internal publication ID
         const internalPublication = await this.beehiivRepository.findPublicationByBeehiivId(publicationId);
         const internalPublicationId = internalPublication?.id || publicationId;
-        const savedPost = await this.saveBeehiivPost(latestPost, internalPublicationId);
+        const savedPost = await this.saveBeehiivPost(latestPost, internalPublicationId, envPublication.name);
         
         return {
           success: true,
@@ -414,7 +456,7 @@ export class BeehiivService {
 
       // Fallback: Get publication details from database
       const publication = await this.beehiivRepository.findPublicationByBeehiivId(publicationId);
-      
+
       if (!publication) {
         return {
           success: false,
@@ -422,15 +464,17 @@ export class BeehiivService {
         };
       }
 
-      console.log(`📡 Fetching latest post from ${publication.name}...`);
+      // Use friendly name from mapping
+      const pubFriendlyName = NEWSLETTER_NAMES[publication.beehiivId] || publication.name;
+      console.log(`📡 Fetching latest post from ${pubFriendlyName}...`);
 
       // Fetch latest post
       const latestPost = await this.fetchLatestPost(publicationId, publication.apiToken);
-      
+
       if (!latestPost) {
         return {
           success: true,
-          message: `No posts found for ${publication.name}`,
+          message: `No posts found for ${pubFriendlyName}`,
         };
       }
 
@@ -459,8 +503,8 @@ export class BeehiivService {
 
       console.log(`💾 Saving new post: "${latestPost.title}"`);
 
-      // Save BeehIiv post
-      const savedPost = await this.saveBeehiivPost(latestPost, publication.id);
+      // Save BeehIiv post with friendly name
+      const savedPost = await this.saveBeehiivPost(latestPost, publication.id, pubFriendlyName);
 
       // Convert to article and save (this will be done in the next step)
       console.log(`✅ Successfully synced: "${latestPost.title}"`);
@@ -540,10 +584,11 @@ export class BeehiivService {
   /**
    * Save BeehIV post to database
    */
-  async saveBeehiivPost(post: BeehiivPostResponse, publicationId: string) {
+  async saveBeehiivPost(post: BeehiivPostResponse, publicationId: string, publicationName?: string) {
     try {
       console.log(`💾 Saving BeehIV post: ${post.title} (ID: ${post.id})`);
-      
+      console.log(`📁 Publication Name received: "${publicationName}"`);
+
       // Extract RSS content from the post structure
       const rssContent = post.content?.free?.rss || null;
       console.log(`📰 RSS Content length: ${rssContent ? rssContent.length : 0} characters`);
@@ -580,13 +625,13 @@ export class BeehiivService {
       const result = await this.beehiivRepository.createPost(beehiivPostData);
       console.log(`✅ Post saved successfully:`, result.id);
       
-      // Convert to article
+      // Convert to multiple articles
       try {
-        console.log(`🔄 Converting BeehIV post "${post.title}" to article...`);
-        const article = await this.convertBeehiivPostToArticle(post, result.id);
-        console.log(`✅ Article created from BeehIV post: ${article.id} - "${article.title}"`);
+        console.log(`🔄 Converting BeehIV post "${post.title}" to multiple articles...`);
+        const articles = await this.convertBeehiivPostToMultipleArticles(post, result.id, publicationName);
+        console.log(`✅ ${articles.length} articles created from BeehIV post: ${articles.map(a => `${a.id} - "${a.title}"`).join(', ')}`);
       } catch (articleError) {
-        console.error(`❌ CRITICAL ERROR: Failed to create article from BeehIV post "${post.title}":`, {
+        console.error(`❌ CRITICAL ERROR: Failed to create articles from BeehIV post "${post.title}":`, {
           error: articleError,
           postId: result.id,
           beehiivId: post.id,
@@ -599,6 +644,495 @@ export class BeehiivService {
     } catch (error) {
       console.error(`❌ Error saving BeehIV post:`, error);
       throw error;
+    }
+  }
+
+  /**
+   * Convert Noticia from new parser to article
+   */
+  async convertNoticiaToArticle(
+    noticia: Noticia,
+    post: BeehiivPostResponse,
+    beehiivPostId: string,
+    newsIndex: number,
+    publicationName?: string
+  ) {
+    try {
+      console.log(`🔄 Converting noticia to article: ${noticia.titulo}`);
+      console.log(`📁 publicationName received: "${publicationName}"`);
+
+      // Create unique slug for this news item
+      const baseSlug = this.generateSlug(noticia.titulo || `noticia-${newsIndex}`);
+      const uniqueSlug = await this.generateUniqueSlug(baseSlug, `${beehiivPostId}-${newsIndex}`);
+
+      // Convert HTML content to rich blocks
+      const blocks = this.htmlToRichBlocks(noticia.conteudo_html, noticia.titulo);
+
+      // Get proper category ID from database
+      const categoryId = await this.getCategoryId(noticia.categoria);
+
+      // Get publication name if not provided
+      const newsletterName = publicationName || await this.getPublicationNameFromPost(post.id);
+      console.log(`📬 Newsletter name for article: "${newsletterName}" (from publicationName: "${publicationName}")`);
+
+      const articleData = {
+        id: generateId(),
+        title: noticia.titulo || `Notícia ${newsIndex}`,
+        slug: uniqueSlug,
+        content: blocks,
+        excerpt: noticia.resumo || this.extractExcerptFromHtml(noticia.conteudo_html),
+        status: this.mapBeehiivStatus(post.status),
+        categoryId: categoryId,
+        source: 'beehiiv' as const,
+        sourceId: `${post.id}-${newsIndex}`, // Unique source ID for each news
+        sourceUrl: post.web_url || null,
+        newsletter: newsletterName,
+        featuredImage: noticia.imagem_principal || post.thumbnail_url || null,
+        tags: post.content_tags || [],
+        seoTitle: noticia.titulo || null,
+        seoDescription: noticia.resumo || this.extractExcerptFromHtml(noticia.conteudo_html),
+        seoKeywords: post.content_tags || [],
+        isFeatured: false,
+        views: 0,
+        shares: 0,
+        likes: 0,
+      };
+
+      console.log(`💾 Creating noticia article:`, {
+        id: articleData.id,
+        title: articleData.title,
+        slug: articleData.slug,
+        source: articleData.source,
+        sourceId: articleData.sourceId,
+        blocksCount: articleData.content.length,
+        categoryId: articleData.categoryId
+      });
+
+      // Create or update article in database using upsert
+      const article = await this.articleRepository.upsert(articleData);
+      console.log(`✅ Noticia article upserted successfully: ${article.id}`);
+
+      return article;
+    } catch (error) {
+      console.error(`❌ Error converting noticia to article:`, {
+        error: error,
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+        newsTitle: noticia.titulo,
+        beehiivPostId: beehiivPostId
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Convert individual news to article (LEGACY)
+   */
+  async convertIndividualNewsToArticle(
+    news: IndividualNews,
+    post: BeehiivPostResponse,
+    beehiivPostId: string,
+    newsIndex: number
+  ) {
+    try {
+      console.log(`🔄 Converting individual news to article: ${news.titulo}`);
+
+      // Create unique slug for this news item
+      const baseSlug = this.generateSlug(news.titulo || `noticia-${newsIndex}`);
+      const uniqueSlug = await this.generateUniqueSlug(baseSlug, `${beehiivPostId}-${newsIndex}`);
+
+      // Convert HTML content to rich blocks with better structure
+      const blocks = this.htmlToRichBlocks(news.conteudo_html, news.titulo);
+
+      // Get proper category ID from database
+      const categoryId = await this.getCategoryId(news.categoria);
+
+      const articleData = {
+        id: generateId(),
+        title: news.titulo || `Notícia ${newsIndex}`,
+        slug: uniqueSlug,
+        content: blocks,
+        excerpt: news.resumo || this.extractExcerptFromHtml(news.conteudo_html),
+        status: this.mapBeehiivStatus(post.status),
+        categoryId: categoryId,
+        source: 'beehiiv' as const,
+        sourceId: `${post.id}-${newsIndex}`, // Unique source ID for each news
+        sourceUrl: post.web_url || null,
+        newsletter: publicationName || null,
+        featuredImage: news.imagem_principal || post.thumbnail_url || null,
+        tags: post.content_tags || [],
+        seoTitle: news.titulo || null,
+        seoDescription: news.resumo || this.extractExcerptFromHtml(news.conteudo_html),
+        seoKeywords: post.content_tags || [],
+        isFeatured: false,
+        views: 0,
+        shares: 0,
+        likes: 0,
+      };
+
+      console.log(`💾 Creating individual news article:`, {
+        id: articleData.id,
+        title: articleData.title,
+        slug: articleData.slug,
+        source: articleData.source,
+        sourceId: articleData.sourceId,
+        blocksCount: articleData.content.length,
+        categoryId: articleData.categoryId
+      });
+
+      // Create or update article in database using upsert
+      const article = await this.articleRepository.upsert(articleData);
+      console.log(`✅ Individual news article upserted successfully: ${article.id}`);
+
+      return article;
+    } catch (error) {
+      console.error(`❌ Error converting individual news to article:`, {
+        error: error,
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+        newsTitle: news.titulo,
+        beehiivPostId: beehiivPostId
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Convert HTML content to blocks
+   */
+  private htmlToBlocks(html: string): any[] {
+    if (!html || html.trim().length === 0) {
+      return [];
+    }
+
+    const blocks = [];
+
+    // Simple HTML to blocks conversion
+    const lines = html
+      .replace(/<\/p>/gi, '\n')
+      .replace(/<\/h[1-6]>/gi, '\n')
+      .replace(/<\/div>/gi, '\n')
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line.length > 0);
+
+    for (const line of lines) {
+      if (line.length > 5) {
+        blocks.push({
+          id: generateId(),
+          type: 'paragraph',
+          data: {
+            text: line
+          }
+        });
+      }
+    }
+
+    return blocks;
+  }
+
+  /**
+   * Convert HTML to rich blocks with better structure
+   */
+  private htmlToRichBlocks(html: string, title: string): any[] {
+    if (!html || html.trim().length === 0) {
+      return [];
+    }
+
+    const blocks = [];
+
+    // Add title as header if provided
+    if (title) {
+      blocks.push({
+        id: generateId(),
+        type: 'header',
+        data: {
+          text: title,
+          level: 2
+        }
+      });
+    }
+
+    // Extract images
+    const imgPattern = /<img[^>]+src="([^"]+)"[^>]*(?:alt="([^"]*)")?[^>]*>/gi;
+    let imgMatch;
+    while ((imgMatch = imgPattern.exec(html)) !== null) {
+      const src = imgMatch[1];
+      const alt = imgMatch[2] || '';
+
+      if (src && !src.includes('pixel') && !src.includes('tracking')) {
+        blocks.push({
+          id: generateId(),
+          type: 'image',
+          data: {
+            file: {
+              url: src
+            },
+            caption: alt,
+            withBorder: false,
+            stretched: true,
+            withBackground: false
+          }
+        });
+      }
+    }
+
+    // Extract paragraphs (with inner HTML tags preserved)
+    const paragraphPattern = /<p[^>]*>([\s\S]*?)<\/p>/gi;
+    let pMatch;
+    while ((pMatch = paragraphPattern.exec(html)) !== null) {
+      let text = pMatch[1]
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .trim();
+
+      // Clean up and normalize HTML tags
+      text = text
+        .replace(/<br\s*\/?>/gi, '<br>')
+        .replace(/<b>/gi, '<strong>')  // Normalize bold
+        .replace(/<\/b>/gi, '</strong>')
+        .replace(/<i>/gi, '<em>')      // Normalize italic
+        .replace(/<\/i>/gi, '</em>')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      if (text && text.length > 5) {
+        blocks.push({
+          id: generateId(),
+          type: 'paragraph',
+          data: {
+            text: text
+          }
+        });
+      }
+    }
+
+    // Extract lists
+    const listPattern = /<ul[^>]*>([\s\S]*?)<\/ul>/gi;
+    let listMatch;
+    while ((listMatch = listPattern.exec(html)) !== null) {
+      const listContent = listMatch[1];
+      const items = [];
+      // Updated regex to capture content with inner tags
+      const itemPattern = /<li[^>]*>([\s\S]*?)<\/li>/gi;
+      let itemMatch;
+
+      while ((itemMatch = itemPattern.exec(listContent)) !== null) {
+        let itemText = itemMatch[1]
+          .replace(/&nbsp;/g, ' ')
+          .replace(/&amp;/g, '&')
+          .replace(/&lt;/g, '<')
+          .replace(/&gt;/g, '>')
+          .replace(/&quot;/g, '"')
+          .replace(/&#39;/g, "'")
+          .trim();
+
+        // Extract text from inner <p> tags if present and normalize HTML
+        itemText = itemText
+          .replace(/<p[^>]*>([\s\S]*?)<\/p>/gi, '$1')
+          .replace(/<br\s*\/?>/gi, '<br>')
+          .replace(/<b>/gi, '<strong>')
+          .replace(/<\/b>/gi, '</strong>')
+          .replace(/<i>/gi, '<em>')
+          .replace(/<\/i>/gi, '</em>')
+          .replace(/\s+/g, ' ')
+          .trim();
+
+        if (itemText) {
+          items.push(itemText);
+        }
+      }
+
+      if (items.length > 0) {
+        blocks.push({
+          id: generateId(),
+          type: 'list',
+          data: {
+            style: 'unordered',
+            items: items
+          }
+        });
+      }
+    }
+
+    // If no blocks were created, fall back to simple extraction
+    if (blocks.length === 0 || (blocks.length === 1 && blocks[0].type === 'header')) {
+      const fallbackBlocks = this.htmlToBlocks(html);
+      blocks.push(...fallbackBlocks);
+    }
+
+    return blocks;
+  }
+
+  /**
+   * Get category ID from name, find in database by slug
+   */
+  private async getCategoryId(categoryName: string): Promise<string | null> {
+    try {
+      // Map Portuguese category names to system categories
+      const categoryMap: Record<string, string> = {
+        'MUNDO': 'internacional',
+        'BRASIL': 'brasil',
+        'TECNOLOGIA': 'tecnologia',
+        'ECONOMIA': 'economia',
+        'VARIEDADES': 'entretenimento',
+        'NEGÓCIOS': 'negocios',
+        'ESPORTES': 'esportes',
+        'SAÚDE': 'saude',
+        'CULTURA': 'cultura',
+        'APRESENTADO POR': 'patrocinado',
+        'APRESENTADO_POR': 'patrocinado',
+        'GERAL': 'geral'
+      };
+
+      const mappedSlug = categoryMap[categoryName.toUpperCase()];
+      const slug = mappedSlug || this.generateSlug(categoryName);
+
+      console.log(`📁 Looking for category: ${categoryName} -> ${slug}`);
+
+      // Find category in database by slug
+      const category = await this.categoryRepository.findBySlug(slug);
+
+      if (category) {
+        console.log(`✅ Found category: ${category.name} (ID: ${category.id})`);
+        return category.id;
+      }
+
+      // If not found, try to find 'geral' as fallback
+      console.log(`⚠️ Category '${slug}' not found, trying fallback 'geral'`);
+      const geralCategory = await this.categoryRepository.findBySlug('geral');
+
+      if (geralCategory) {
+        console.log(`✅ Using fallback category: ${geralCategory.name} (ID: ${geralCategory.id})`);
+        return geralCategory.id;
+      }
+
+      console.log(`⚠️ No category found, returning null`);
+      return null;
+
+    } catch (error) {
+      console.error('Error getting category ID:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Extract excerpt from HTML content
+   */
+  private extractExcerptFromHtml(html: string): string {
+    if (!html) return '';
+
+    const text = html
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    return text.length > 150 ? text.substring(0, 150) + '...' : text;
+  }
+
+  /**
+   * Map Portuguese category names to system categories
+   */
+  private mapCategoryFromPortugese(categoria: string): string {
+    const categoryMap: Record<string, string> = {
+      'MUNDO': 'internacional',
+      'BRASIL': 'brasil',
+      'TECNOLOGIA': 'tecnologia',
+      'ECONOMIA': 'economia',
+      'VARIEDADES': 'entretenimento',
+      'NEGÓCIOS': 'negocios',
+      'ESPORTES': 'esportes',
+      'SAÚDE': 'saude',
+      'CULTURA': 'cultura',
+      'APRESENTADO POR': 'patrocinado',
+      'APRESENTADO_POR': 'patrocinado',
+      'GERAL': 'geral'
+    };
+
+    return categoryMap[categoria.toUpperCase()] || 'geral';
+  }
+
+  /**
+   * Convert BeehIV post to multiple articles (NEW - extracts multiple news)
+   */
+  async convertBeehiivPostToMultipleArticles(post: BeehiivPostResponse, beehiivPostId: string, publicationName?: string) {
+    try {
+      console.log(`🔄 Converting BeehIV post to multiple articles: ${post.title}`);
+
+      // Extract RSS content
+      const rssContent = post.content?.free?.rss || '';
+      console.log(`📰 RSS Content length: ${rssContent.length} chars`);
+
+      // Debug: Log sample of RSS content
+      if (rssContent.length > 0) {
+        console.log('📄 RSS Content sample (first 500 chars):');
+        console.log(rssContent.substring(0, 500));
+
+        // Check for h6 categories
+        const h6Matches = rssContent.match(/<h6[^>]*id="[^"]*"[^>]*>[^<]+<\/h6>/gi) || [];
+        console.log(`🏷️ Found ${h6Matches.length} h6 category tags:`);
+        h6Matches.forEach(match => console.log(`  - ${match}`));
+
+        // Check for h1 titles
+        const h1Matches = rssContent.match(/<h1[^>]*>[^<]+<\/h1>/gi) || [];
+        console.log(`📝 Found ${h1Matches.length} h1 title tags:`);
+        h1Matches.slice(0, 5).forEach(match => console.log(`  - ${match}`));
+      }
+
+      if (!rssContent || rssContent.length === 0) {
+        console.log('⚠️ No RSS content found, creating single article');
+        return [await this.convertBeehiivPostToArticle(post, beehiivPostId)];
+      }
+
+      // Extract individual news using new Newsletter Parser
+      console.log('🚀 Using new Newsletter Parser...');
+
+      const newsletterData: NewsletterData = {
+        id: post.id,
+        title: post.title,
+        subject_line: post.subject_line,
+        preview_text: post.preview_text,
+        thumbnail_url: post.thumbnail_url,
+        web_url: post.web_url,
+        created: post.created,
+        publish_date: post.publish_date,
+        content: post.content
+      };
+
+      const parserResult = extrairNoticiasNewsletter(newsletterData);
+      console.log(`📊 New parser extracted ${parserResult.noticias.length} individual news items`);
+
+      if (parserResult.noticias.length === 0) {
+        console.log('⚠️ No individual news found with new parser, creating single article');
+        console.log('🔍 Falling back to single article creation...');
+        return [await this.convertBeehiivPostToArticle(post, beehiivPostId)];
+      }
+
+      // Convert each news item to an article
+      const articles = [];
+      for (let i = 0; i < parserResult.noticias.length; i++) {
+        const news = parserResult.noticias[i];
+        try {
+          const article = await this.convertNoticiaToArticle(news, post, beehiivPostId, i + 1, publicationName);
+          articles.push(article);
+        } catch (error) {
+          console.error(`❌ Failed to convert news ${i + 1}: ${news.titulo}`, error);
+          // Continue with other news items
+        }
+      }
+
+      console.log(`✅ Successfully converted ${articles.length}/${parserResult.noticias.length} news items to articles`);
+      return articles;
+
+    } catch (error) {
+      console.error(`❌ Error converting BeehIV post to multiple articles:`, error);
+      // Fallback to single article
+      return [await this.convertBeehiivPostToArticle(post, beehiivPostId)];
     }
   }
 
@@ -645,6 +1179,17 @@ export class BeehiivService {
       const baseSlug = post.slug || this.generateSlug(post.title || 'untitled');
       const uniqueSlug = await this.generateUniqueSlug(baseSlug, beehiivPostId);
 
+      // Auto-detect category from The News sections
+      const detectedCategorySlug = parsedContent.sections && parsedContent.sections.length > 0 ?
+        this.theNewsParser.detectMainCategory(parsedContent.sections) :
+        this.detectCategoryFromContent(post.title, parsedContent.blocks);
+
+      // Get category ID from database
+      const categoryId = await this.getCategoryId(detectedCategorySlug);
+
+      // Get publication name from NEWSLETTERS mapping in controller
+      const publicationNameToUse = publicationName || await this.getPublicationNameByBeehiivId(post.id);
+
       const articleData = {
         id: generateId(),
         title: post.title || 'Untitled',
@@ -652,12 +1197,11 @@ export class BeehiivService {
         content: parsedContent.blocks,
         excerpt: post.preview_text || this.extractExcerpt(parsedContent.blocks),
         status: this.mapBeehiivStatus(post.status),
-        // Auto-detect category from The News sections
-        category: parsedContent.sections && parsedContent.sections.length > 0 ?
-          this.theNewsParser.detectMainCategory(parsedContent.sections) :
-          this.detectCategoryFromContent(post.title, parsedContent.blocks),
+        categoryId: categoryId,
         source: 'beehiiv' as const,
-        newsletter: post.subject_line || null,
+        sourceId: post.id, // Store BeehIV post ID in sourceId field
+        sourceUrl: post.web_url || null,
+        newsletter: publicationNameToUse,
         featuredImage: post.thumbnail_url || null,
         tags: post.content_tags || [],
         seoTitle: post.meta_default_title || null,
@@ -667,8 +1211,6 @@ export class BeehiivService {
         views: 0,
         shares: 0,
         likes: 0,
-        // Link to BeehIV post
-        beehiivPostId: beehiivPostId,
       };
 
       console.log(`💾 Creating article with data:`, {
@@ -676,7 +1218,7 @@ export class BeehiivService {
         title: articleData.title,
         slug: articleData.slug,
         source: articleData.source,
-        beehiivPostId: articleData.beehiivPostId,
+        sourceId: articleData.sourceId,
         blocksCount: articleData.content.length
       });
 
@@ -713,7 +1255,7 @@ export class BeehiivService {
    */
   private async generateUniqueSlug(baseSlug: string, beehiivPostId: string): Promise<string> {
     try {
-      // First check if we're updating an existing article
+      // First check if we're updating an existing article by BeehIV post ID
       const existingArticle = await this.articleRepository.findByBeehiivPostId(beehiivPostId);
       if (existingArticle) {
         // If updating, keep the same slug
@@ -790,5 +1332,49 @@ export class BeehiivService {
   async getPublicationApiToken(publicationBeehiivId: string): Promise<string | null> {
     const publication = await this.beehiivRepository.findPublicationByBeehiivId(publicationBeehiivId);
     return publication?.apiToken || null;
+  }
+
+  /**
+   * Get publication name by looking up the BeehIV post
+   */
+  async getPublicationNameByBeehiivId(beehiivPostId: string): Promise<string | null> {
+    try {
+      const beehiivPost = await this.beehiivRepository.findPostByBeehiivId(beehiivPostId);
+      if (beehiivPost && beehiivPost.publicationId) {
+        const publication = await this.beehiivRepository.findPublicationById(beehiivPost.publicationId);
+        return publication?.name || null;
+      }
+      return null;
+    } catch (error) {
+      console.error('Error getting publication name:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Get publication name from BeehIV post ID
+   * Uses the NEWSLETTERS mapping to get the friendly name
+   */
+  async getPublicationNameFromPost(postId: string): Promise<string | null> {
+    try {
+      // Try to find existing post in database
+      const beehiivPost = await this.beehiivRepository.findPostByBeehiivId(postId);
+      if (beehiivPost && beehiivPost.publicationId) {
+        const publication = await this.beehiivRepository.findPublicationById(beehiivPost.publicationId);
+        if (publication) {
+          // First try to get name from NEWSLETTER_NAMES mapping
+          const mappedName = NEWSLETTER_NAMES[publication.beehiivId];
+          if (mappedName) {
+            return mappedName;
+          }
+          // Fallback to publication name from database
+          return publication.name;
+        }
+      }
+      return null;
+    } catch (error) {
+      console.error('Error getting publication name from post:', error);
+      return null;
+    }
   }
 }

@@ -62,7 +62,7 @@ export class CategoryController {
           data: category,
         }, 201);
       } catch (error) {
-        console.error('Error creating category:', error);
+        // Error creating category
         return c.json({
           success: false,
           error: error instanceof Error ? error.message : 'Failed to create category',
@@ -80,7 +80,7 @@ export class CategoryController {
           data: stats,
         });
       } catch (error) {
-        console.error('Error fetching category stats:', error);
+        // Error fetching category stats
         return c.json({
           success: false,
           error: 'Failed to fetch category statistics',
@@ -98,7 +98,7 @@ export class CategoryController {
           data: hierarchy,
         });
       } catch (error) {
-        console.error('Error fetching category hierarchy:', error);
+        // Error fetching category hierarchy
         return c.json({
           success: false,
           error: 'Failed to fetch category hierarchy',
@@ -125,7 +125,7 @@ export class CategoryController {
           data: category,
         });
       } catch (error) {
-        console.error('Error fetching category:', error);
+        // Error fetching category
         return c.json({
           success: false,
           error: 'Failed to fetch category',
@@ -153,7 +153,7 @@ export class CategoryController {
           data: category,
         });
       } catch (error) {
-        console.error('Error updating category:', error);
+        // Error updating category
         return c.json({
           success: false,
           error: error instanceof Error ? error.message : 'Failed to update category',
@@ -180,7 +180,7 @@ export class CategoryController {
           message: 'Category deleted successfully',
         });
       } catch (error) {
-        console.error('Error deleting category:', error);
+        // Error deleting category
         return c.json({
           success: false,
           error: 'Failed to delete category',
@@ -198,14 +198,14 @@ export class CategoryController {
           sortOrder: params.sortOrder,
         });
 
-        console.log('📂 Categories with article count:', categories.map(c => ({ name: c.name, articleCount: c.articleCount })));
+        // Categories with article count
 
         return c.json({
           success: true,
           data: categories,
         });
       } catch (error) {
-        console.error('Error listing categories:', error);
+        // Error listing categories
         return c.json({
           success: false,
           error: 'Failed to list categories',
@@ -223,7 +223,7 @@ export class CategoryController {
           data: categories,
         });
       } catch (error) {
-        console.error('Error fetching parent categories:', error);
+        // Error fetching parent categories
         return c.json({
           success: false,
           error: 'Failed to fetch parent categories',
@@ -243,7 +243,7 @@ export class CategoryController {
           data: subcategories,
         });
       } catch (error) {
-        console.error('Error fetching subcategories:', error);
+        // Error fetching subcategories
         return c.json({
           success: false,
           error: 'Failed to fetch subcategories',
@@ -261,7 +261,7 @@ export class CategoryController {
           data: categories,
         });
       } catch (error) {
-        console.error('Error fetching featured categories:', error);
+        // Error fetching featured categories
         return c.json({
           success: false,
           error: 'Failed to fetch featured categories',
@@ -289,7 +289,7 @@ export class CategoryController {
           data: category,
         });
       } catch (error) {
-        console.error('Error fetching category by slug:', error);
+        // Error fetching category by slug
         return c.json({
           success: false,
           error: 'Failed to fetch category',

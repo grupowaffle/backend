@@ -27,7 +27,7 @@ export class DashboardController {
           return c.json({ success: false, error: 'Usuário não autenticado' }, 401);
         }
 
-        console.log(`📊 Getting user dashboard for ${user.name} (${user.role})`);
+        // Getting user dashboard
 
         const dashboard = await this.dashboardService.getUserDashboard(user.id, user.role);
 
@@ -59,7 +59,7 @@ export class DashboardController {
           }, 403);
         }
 
-        console.log(`📈 Getting dashboard overview for ${user.name} (${user.role})`);
+        // Getting dashboard overview
 
         const overview = await this.dashboardService.getDashboardOverview();
 
@@ -91,7 +91,7 @@ export class DashboardController {
           }, 403);
         }
 
-        console.log(`📊 Getting editorial metrics for admin ${user.name}`);
+        // Getting editorial metrics
 
         const metrics = await this.dashboardService.getEditorialMetrics();
 
@@ -116,7 +116,7 @@ export class DashboardController {
           return c.json({ success: false, error: 'Usuário não autenticado' }, 401);
         }
 
-        console.log(`⚡ Getting quick stats for ${user.name} (${user.role})`);
+        // Getting quick stats
 
         // Para usuários normais, mostrar apenas suas estatísticas
         if (!['admin', 'editor-chefe'].includes(user.role)) {
@@ -164,7 +164,7 @@ export class DashboardController {
 
         const limit = parseInt(c.req.query('limit') || '20');
 
-        console.log(`📝 Getting recent activity for ${user.name} (limit: ${limit})`);
+        // Getting recent activity
 
         // Admins/editores-chefe veem toda atividade
         if (['admin', 'editor-chefe'].includes(user.role)) {
@@ -314,7 +314,7 @@ export class DashboardController {
 
         const format = c.req.query('format') || 'json';
         
-        console.log(`📥 Exporting dashboard data in ${format} format for admin ${user.name}`);
+        // Exporting dashboard data
 
         const [overview, metrics] = await Promise.all([
           this.dashboardService.getDashboardOverview(),

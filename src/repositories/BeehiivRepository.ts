@@ -39,6 +39,24 @@ export class BeehiivRepository extends BaseRepository {
   }
 
   /**
+   * Get publication by internal ID
+   */
+  async findPublicationById(id: string): Promise<BeehiivPublication | null> {
+    try {
+      const result = await this.db
+        .select()
+        .from(beehiivPublications)
+        .where(eq(beehiivPublications.id, id))
+        .limit(1);
+
+      return result[0] || null;
+    } catch (error) {
+      this.handleError(error, 'find publication by id');
+      throw error;
+    }
+  }
+
+  /**
    * Get publication by BeehIV ID
    */
   async findPublicationByBeehiivId(beehiivId: string): Promise<BeehiivPublication | null> {
@@ -57,23 +75,40 @@ export class BeehiivRepository extends BaseRepository {
   }
 
   /**
+   * Get all publications
+   */
+  async getAllPublications(): Promise<BeehiivPublication[]> {
+    try {
+      const result = await this.db
+        .select()
+        .from(beehiivPublications)
+        .orderBy(beehiivPublications.name);
+
+      return result;
+    } catch (error) {
+      this.handleError(error, 'get all publications');
+      throw error;
+    }
+  }
+
+  /**
    * List active publications
    */
   async listActivePublications(): Promise<BeehiivPublication[]> {
     try {
       console.log('🔍 Starting listActivePublications query...');
-      
+
       const result = await this.db
         .select()
         .from(beehiivPublications)
         .where(eq(beehiivPublications.isActive, true))
         .orderBy(beehiivPublications.name);
-      
+
       console.log('📊 Found active publications:', result.length);
       if (result.length > 0) {
         console.log('First publication:', result[0]);
       }
-      
+
       return result;
     } catch (error) {
       console.error('❌ Error in listActivePublications:', error);

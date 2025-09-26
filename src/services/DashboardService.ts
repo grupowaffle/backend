@@ -137,7 +137,7 @@ export class DashboardService {
    */
   async getDashboardOverview(): Promise<DashboardOverview> {
     try {
-      console.log('📊 Generating dashboard overview...');
+      // Generating dashboard overview
 
       // Visão geral dos artigos por status
       const articlesOverview = await this.getArticlesOverview();
@@ -172,7 +172,7 @@ export class DashboardService {
    */
   async getEditorialMetrics(): Promise<EditorialMetrics> {
     try {
-      console.log('📈 Generating editorial metrics...');
+      // Generating editorial metrics
 
       // Métricas de workflow
       const workflowStats = await this.workflowService.getWorkflowStats();
@@ -204,7 +204,7 @@ export class DashboardService {
    */
   async getUserDashboard(userId: string, userRole: string): Promise<UserDashboard> {
     try {
-      console.log(`👤 Generating user dashboard for ${userId} (${userRole})`);
+      // Generating user dashboard
 
       // Estatísticas pessoais
       const personalStats = await this.getUserPersonalStats(userId);
@@ -648,7 +648,7 @@ export class DashboardService {
    * Artigos atribuídos ao usuário
    */
   private async getArticlesAssignedToUser(userId: string, userRole: string) {
-    if (!['revisor', 'editor-chefe', 'admin'].includes(userRole)) {
+    if (!['revisor', 'editor-chefe', 'admin', 'super_admin'].includes(userRole)) {
       return [];
     }
 
@@ -678,7 +678,7 @@ export class DashboardService {
       },
     ];
 
-    if (['editor', 'editor-chefe', 'admin'].includes(userRole)) {
+    if (['editor', 'editor-chefe', 'admin', 'super_admin'].includes(userRole)) {
       actions.push({
         label: 'Em revisão',
         url: '/articles?status=review',
@@ -686,7 +686,7 @@ export class DashboardService {
       });
     }
 
-    if (['editor-chefe', 'admin'].includes(userRole)) {
+    if (['editor-chefe', 'admin', 'super_admin'].includes(userRole)) {
       actions.push(
         {
           label: 'Aprovar artigos',
@@ -701,7 +701,7 @@ export class DashboardService {
       );
     }
 
-    if (userRole === 'admin') {
+    if (['admin', 'super_admin'].includes(userRole)) {
       actions.push({
         label: 'Configurações',
         url: '/settings',

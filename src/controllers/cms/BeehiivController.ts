@@ -542,6 +542,43 @@ export class BeehiivController {
       }
     });
 
+    // Debug RSS content endpoint
+    this.app.post('/debug-rss', async (c) => {
+      try {
+        const { beehiivPostId } = await c.req.json();
+
+        if (!beehiivPostId) {
+          return c.json({
+            success: false,
+            error: 'beehiivPostId is required'
+          }, 400);
+        }
+
+        // Get the BeehIV post from database
+        const beehiivPost = await this.beehiivRepository.findPostByBeehiivId(beehiivPostId);
+
+        if (!beehiivPost) {
+          return c.json({
+            success: false,
+            error: 'BeehIV post not found'
+          }, 404);
+        }
+
+        const rssContent = beehiivPost.rssContent || '';
+
+        return c.text(rssContent, 200, {
+          'Content-Type': 'text/html; charset=utf-8'
+        });
+
+      } catch (error) {
+        console.error('❌ Error in debug RSS:', error);
+        return c.json({
+          success: false,
+          error: error instanceof Error ? error.message : 'Debug failed'
+        }, 500);
+      }
+    });
+
     // Test conversion endpoint for debugging
     this.app.post('/test-conversion', async (c) => {
       try {
@@ -589,25 +626,33 @@ export class BeehiivController {
 
         console.log(`📊 Converting post "${postResponse.title}" with RSS length: ${postResponse.content.free.rss.length}`);
 
-        // Force conversion to article
-        const article = await this.beehiivService.convertBeehiivPostToArticle(postResponse, beehiivPost.id);
+        // Debug: Show raw RSS content sample
+        const rssContent = postResponse.content?.free?.rss || '';
+        const rssSample = rssContent.substring(0, 1000);
+        console.log(`🐛 DEBUG RSS Sample (first 1000 chars):`, rssSample);
+
+        // Force conversion to multiple articles (NEW)
+        const articles = await this.beehiivService.convertBeehiivPostToMultipleArticles(postResponse, beehiivPost.id);
 
         return c.json({
           success: true,
-          message: 'Conversion test completed',
+          message: 'Multi-article conversion test completed',
           data: {
             beehiivPost: {
               id: beehiivPost.id,
               title: beehiivPost.title,
               rssLength: beehiivPost.rssContent?.length || 0
             },
-            article: {
+            articlesCreated: articles.length,
+            rssSample: rssSample, // Add RSS sample to response for debugging
+            articles: articles.map(article => ({
               id: article.id,
               title: article.title,
               slug: article.slug,
               category: article.category,
-              blocksCount: article.content?.length || 0
-            }
+              blocksCount: article.content?.length || 0,
+              sourceId: article.sourceId
+            }))
           }
         });
 

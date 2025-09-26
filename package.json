@@ -10,7 +10,10 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "dotenv -e .dev.vars -- drizzle-kit migrate",
     "db:push": "dotenv -e .dev.vars -- drizzle-kit push",
-    "db:studio": "dotenv -e .dev.vars -- drizzle-kit studio"
+    "db:studio": "dotenv -e .dev.vars -- drizzle-kit studio",
+    "test:newsletter": "dotenv-cli -e .dev.vars -- tsx test-newsletter-parse.ts",
+    "seed:categories": "dotenv-cli -e .dev.vars -- tsx seed-categories.ts",
+    "check:categories": "dotenv-cli -e .dev.vars -- tsx check-categories.ts"
   },
   "repository": {
     "type": "git",
@@ -26,11 +29,13 @@
     "@neondatabase/serverless": "^1.0.1",
     "@paralleldrive/cuid2": "^2.2.2",
     "@sentry/cloudflare": "^10.10.0",
+    "@types/jsdom": "^21.1.7",
     "bcryptjs": "^3.0.2",
     "dotenv": "^17.2.2",
     "drizzle-kit": "^0.31.4",
     "drizzle-orm": "^0.44.5",
     "hono": "^4.9.6",
+    "jsdom": "^27.0.0",
     "jsonwebtoken": "^9.0.2",
     "pg": "^8.16.3",
     "qrcode": "^1.5.4",
@@ -47,6 +52,7 @@
     "@types/speakeasy": "^2.0.10",
     "@types/ws": "^8.18.1",
     "dotenv-cli": "^10.0.0",
+    "tsx": "^4.20.5",
     "typescript": "^5.9.2"
   }
 }

@@ -339,16 +339,9 @@ export class AuthService {
       if (this.d1Client) {
         // Para D1, validar sessionToken simples
         if (sessionToken === 'd1-session-token') {
-          // Retornar dados básicos do usuário (seria melhor buscar do banco)
-          return {
-            id: '1',
-            email: 'geraldo.mazzini@waffle.com.br',
-            role: 'super_admin',
-            brand_name: null,
-            brandId: null,
-            permissions: ['*'],
-            roles: ['super_admin']
-          };
+          // 'd1-session-token' é um placeholder - não retornar dados falsos
+          // Retornar null para usar os dados do JWT original
+          return null;
         }
         return null;
       } else {

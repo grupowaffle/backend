@@ -71,7 +71,7 @@ export class WorkflowController {
 
         const data = c.req.valid('json');
         
-        console.log(`🔄 Workflow transition requested by ${user.name} (${user.role}): ${data.articleId} -> ${data.toStatus}`);
+        // Workflow transition requested
 
         const options: any = {
           reason: data.reason,
@@ -96,21 +96,21 @@ export class WorkflowController {
         );
 
         if (result.success) {
-          console.log(`✅ Workflow transition successful: ${data.articleId} -> ${data.toStatus}`);
+          // Workflow transition successful
           return c.json({
             success: true,
             message: result.message,
             data: result.article,
           });
         } else {
-          console.log(`❌ Workflow transition failed: ${result.message}`);
+          // Workflow transition failed
           return c.json({
             success: false,
             error: result.message,
           }, 400);
         }
       } catch (error) {
-        console.error('Error in workflow transition:', error);
+        // Error in workflow transition
         return c.json({
           success: false,
           error: error instanceof Error ? error.message : 'Erro na transição de status',
@@ -124,7 +124,7 @@ export class WorkflowController {
         const params = c.req.valid('query');
         const user = c.get('user');
 
-        console.log(`📋 Getting articles by status: ${params.status} (page ${params.page})`);
+        // Getting articles by status
 
         let status: WorkflowStatus | WorkflowStatus[] | undefined;
         
@@ -161,7 +161,7 @@ export class WorkflowController {
           total: result.total,
         });
       } catch (error) {
-        console.error('Error getting articles by status:', error);
+        // Error getting articles by status
         return c.json({
           success: false,
           error: 'Erro ao buscar artigos',
@@ -174,7 +174,7 @@ export class WorkflowController {
       try {
         const articleId = c.req.param('id');
 
-        console.log(`📜 Getting workflow history for article: ${articleId}`);
+        // Getting workflow history
 
         const history = await this.workflowService.getWorkflowHistory(articleId);
 
@@ -183,7 +183,7 @@ export class WorkflowController {
           data: history,
         });
       } catch (error) {
-        console.error('Error getting workflow history:', error);
+        // Error getting workflow history
         return c.json({
           success: false,
           error: 'Erro ao buscar histórico',
@@ -209,7 +209,7 @@ export class WorkflowController {
 
         const { articleId, assignedToUserId } = c.req.valid('json');
 
-        console.log(`👤 Assigning article ${articleId} to user ${assignedToUserId} by ${user.name}`);
+        // Assigning article
 
         const result = await this.workflowService.assignArticle(
           articleId,
@@ -231,7 +231,7 @@ export class WorkflowController {
           }, 400);
         }
       } catch (error) {
-        console.error('Error assigning article:', error);
+        // Error assigning article
         return c.json({
           success: false,
           error: 'Erro ao atribuir artigo',
@@ -274,7 +274,7 @@ export class WorkflowController {
           },
         });
       } catch (error) {
-        console.error('Error getting available transitions:', error);
+        // Error getting available transitions
         return c.json({
           success: false,
           error: 'Erro ao buscar transições disponíveis',
@@ -295,7 +295,7 @@ export class WorkflowController {
           }, 403);
         }
 
-        console.log('📊 Getting workflow statistics');
+        // Getting workflow statistics
 
         const stats = await this.workflowService.getWorkflowStats();
 
@@ -304,7 +304,7 @@ export class WorkflowController {
           data: stats,
         });
       } catch (error) {
-        console.error('Error getting workflow stats:', error);
+        // Error getting workflow stats
         return c.json({
           success: false,
           error: 'Erro ao buscar estatísticas',
@@ -325,7 +325,7 @@ export class WorkflowController {
           }, 403);
         }
 
-        console.log('📅 Processing scheduled publications manually');
+        // Processing scheduled publications
 
         const result = await this.workflowService.processScheduledPublications();
 
@@ -338,7 +338,7 @@ export class WorkflowController {
           },
         });
       } catch (error) {
-        console.error('Error processing scheduled publications:', error);
+        // Error processing scheduled publications
         return c.json({
           success: false,
           error: 'Erro ao processar publicações agendadas',
@@ -354,7 +354,7 @@ export class WorkflowController {
           return c.json({ success: false, error: 'Usuário não autenticado' }, 401);
         }
 
-        console.log(`📊 Getting workflow dashboard for user: ${user.name} (${user.role})`);
+        // Getting workflow dashboard
 
         // Buscar artigos do usuário por status
         const myDrafts = await this.workflowService.getArticlesByStatus('draft', { userId: user.id, limit: 5 });
@@ -396,7 +396,7 @@ export class WorkflowController {
           },
         });
       } catch (error) {
-        console.error('Error getting workflow dashboard:', error);
+        // Error getting workflow dashboard
         return c.json({
           success: false,
           error: 'Erro ao carregar dashboard',

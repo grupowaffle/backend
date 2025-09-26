@@ -27,7 +27,7 @@ crons = ["0 7 * * *"]
 [vars]
 NODE_ENV = "production"
 GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
-PORTAL_BASE_URL = "https://portal.thenews.com"
+PORTAL_BASE_URL = "https://cms.thenewscc.com.br/"
 
 # Variáveis sensíveis devem ficar no .dev.vars para desenvolvimento
 # e ser configuradas via wrangler secret put para produção

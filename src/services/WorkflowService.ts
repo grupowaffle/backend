@@ -23,8 +23,8 @@ export type WorkflowStatus =
 // Transições permitidas
 const WORKFLOW_TRANSITIONS: Record<WorkflowStatus, WorkflowStatus[]> = {
   beehiiv_pending: ['draft', 'review', 'archived'],
-  draft: ['review', 'archived'],
-  review: ['approved', 'draft', 'rejected'],
+  draft: ['review', 'approved', 'published', 'archived', 'rejected'], // Adicionado 'published' para aprovação direta
+  review: ['approved', 'published', 'draft', 'rejected'], // Adicionado 'published' para aprovação direta
   approved: ['published', 'draft'],
   published: ['archived'],
   archived: ['draft'],
@@ -33,6 +33,7 @@ const WORKFLOW_TRANSITIONS: Record<WorkflowStatus, WorkflowStatus[]> = {
 
 // Permissões por role
 const ROLE_PERMISSIONS: Record<string, WorkflowStatus[]> = {
+  super_admin: ['beehiiv_pending', 'draft', 'review', 'approved', 'published', 'archived', 'rejected'], // Acesso total
   admin: ['beehiiv_pending', 'draft', 'review', 'approved', 'published', 'archived', 'rejected'],
   'editor-chefe': ['beehiiv_pending', 'draft', 'review', 'approved', 'published', 'rejected'],
   editor: ['beehiiv_pending', 'draft', 'review'],
@@ -109,7 +110,7 @@ export class WorkflowService {
     } = {}
   ): Promise<{ success: boolean; message: string; article?: any }> {
     try {
-      console.log(`🔄 Transitioning article ${articleId} to ${toStatus} by ${userName} (${userRole})`);
+      // Transitioning article
 
       // Buscar artigo atual
       const article = await this.articleRepository.findById(articleId);
@@ -187,7 +188,7 @@ export class WorkflowService {
         );
       }
 
-      console.log(`✅ Article ${articleId} transitioned from ${currentStatus} to ${toStatus}`);
+      // Article transitioned
 
       return {
         success: true,
@@ -196,7 +197,7 @@ export class WorkflowService {
       };
 
     } catch (error) {
-      console.error('Error in workflow transition:', error);
+      // Error in workflow transition
       return {
         success: false,
         message: error instanceof Error ? error.message : 'Erro na transição',
@@ -215,7 +216,7 @@ export class WorkflowService {
         createdAt: new Date(),
       });
     } catch (error) {
-      console.error('Error recording workflow history:', error);
+      // Error recording workflow history
       // Não falhar a transição por causa do histórico
     }
   }
@@ -233,7 +234,7 @@ export class WorkflowService {
 
       return history;
     } catch (error) {
-      console.error('Error getting workflow history:', error);
+      // Error getting workflow history
       return [];
     }
   }
@@ -307,7 +308,7 @@ export class WorkflowService {
         },
       };
     } catch (error) {
-      console.error('Error getting articles by status:', error);
+      // Error getting articles by status
       return { articles: [], total: 0, pagination: { page, limit, total: 0, totalPages: 0 } };
     }
   }
@@ -386,7 +387,7 @@ export class WorkflowService {
       };
 
     } catch (error) {
-      console.error('Error getting workflow stats:', error);
+      // Error getting workflow stats
       return {
         statusCounts: {
           beehiiv_pending: 0,
@@ -449,7 +450,7 @@ export class WorkflowService {
 
       return { success: true, message: 'Artigo atribuído com sucesso' };
     } catch (error) {
-      console.error('Error assigning article:', error);
+      // Error assigning article
       return { success: false, message: 'Erro ao atribuir artigo' };
     }
   }
@@ -500,7 +501,7 @@ export class WorkflowService {
           )
         );
 
-      console.log(`📅 Processing ${scheduledArticles.length} scheduled articles`);
+      // Processing scheduled articles
 
       let published = 0;
       const errors: string[] = [];
@@ -521,20 +522,20 @@ export class WorkflowService {
 
           if (result.success) {
             published++;
-            console.log(`✅ Auto-published: ${article.title}`);
+            // Auto-published
           } else {
             errors.push(`${article.title}: ${result.message}`);
           }
         } catch (error) {
           const errorMessage = `${article.title}: ${error instanceof Error ? error.message : 'Erro desconhecido'}`;
           errors.push(errorMessage);
-          console.error('Error auto-publishing article:', error);
+          // Error auto-publishing article
         }
       }
 
       return { published, errors };
     } catch (error) {
-      console.error('Error processing scheduled publications:', error);
+      // Error processing scheduled publications
       return { published: 0, errors: ['Erro ao processar publicações agendadas'] };
     }
   }

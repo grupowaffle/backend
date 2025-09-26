@@ -106,8 +106,8 @@ export const authMiddleware = async (
       isMasterAccess = user.permissions?.includes('*') || user.role === 'master';
     }
 
-    // Se o JWT contiver sessionToken, valida a sessão no D1
-    if (payload.sessionToken) {
+    // Se o JWT contiver sessionToken válido (não placeholder), valida a sessão no D1
+    if (payload.sessionToken && payload.sessionToken !== 'd1-session-token') {
       const d1Client = new CloudflareD1Client({
         accountId: env.CLOUDFLARE_ACCOUNT_ID,
         databaseId: env.CLOUDFLARE_D1_DATABASE_ID,
@@ -127,6 +127,7 @@ export const authMiddleware = async (
         ...sessionUser
       };
     }
+    // Se sessionToken for 'd1-session-token' (placeholder), usar apenas dados do JWT
 
     c.set('user', user);
     c.set('isMasterAccess', isMasterAccess);

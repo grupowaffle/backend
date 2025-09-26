@@ -316,7 +316,8 @@ export class ArticleRepository extends BaseRepository {
         .from(articles)
         .where(
           and(
-            eq(articles.beehiivPostId, postId),
+            eq(articles.sourceId, postId),
+            eq(articles.source, 'beehiiv'),
             // Ignore deleted and archived articles
             notInArray(articles.status, ['deleted', 'archived'])
           )
@@ -337,14 +338,14 @@ export class ArticleRepository extends BaseRepository {
     try {
       console.log(`🔄 Upserting article: ${data.title}`);
 
-      // Check if article already exists by beehiivPostId
+      // Check if article already exists by sourceId for beehiiv articles
       let existingArticle: Article | null = null;
 
-      if (data.beehiivPostId) {
-        existingArticle = await this.findByBeehiivPostId(data.beehiivPostId);
+      if (data.source === 'beehiiv' && data.sourceId) {
+        existingArticle = await this.findByBeehiivPostId(data.sourceId);
       }
 
-      // IMPORTANT: For BeehIV content, we ONLY match by beehiivPostId
+      // IMPORTANT: For BeehIV content, we ONLY match by sourceId
       // We do NOT check by slug to avoid false matches with manual articles
       // Each BeehIV post has a unique ID like "post_5990a261-c61f-4a98-841f-d514d71c8c9b"
 

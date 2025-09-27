@@ -87,7 +87,14 @@ export class BaseRepository {
    */
   protected handleError(error: any, operation: string) {
     console.error(`Database error during ${operation}:`, error);
-    
+    console.error('Error details:', {
+      message: error?.message,
+      code: error?.code,
+      detail: error?.detail,
+      hint: error?.hint,
+      stack: error?.stack
+    });
+
     if (error.code === '23505') {
       throw new Error('Record already exists');
     }
@@ -97,7 +104,12 @@ export class BaseRepository {
     if (error.code === '23514') {
       throw new Error('Check constraint violation');
     }
-    
+
+    // Se houver uma mensagem de erro específica, usar ela
+    if (error?.message) {
+      throw new Error(`Database operation failed: ${operation} - ${error.message}`);
+    }
+
     throw new Error(`Database operation failed: ${operation}`);
   }
 }

@@ -847,22 +847,18 @@ export const mediaFiles = pgTable('media_files', {
   fileType: text('fileType').notNull(), // MIME type
   fileSize: integer('fileSize').notNull(), // em bytes
   r2Key: text('r2Key').notNull().unique(), // Chave no R2
-  r2Url: text('r2Url').notNull(), // URL interna do R2
   internalUrl: text('internalUrl').notNull(), // URL servida pelo Worker
-  module: text('module').notNull(), // 'articles', 'profiles', etc.
-  entityId: text('entityId'), // ID da entidade relacionada
+  module: text('module').notNull().default('general'), // 'articles', 'profiles', etc.
   uploadedBy: text('uploadedBy').references(() => users.id),
   description: text('description'),
-  alt: text('alt'), // Texto alternativo para acessibilidade
-  tags: json('tags'), // Array de tags
-  metadata: json('metadata'), // Metadados adicionais
+  tags: json('tags').default([]), // Array de tags
+  metadata: json('metadata').default({}), // Metadados adicionais
   isActive: boolean('isActive').notNull().default(true),
   createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({
   r2KeyIdx: index('media_files_r2_key_idx').on(table.r2Key),
   moduleIdx: index('media_files_module_idx').on(table.module),
-  entityIdIdx: index('media_files_entity_id_idx').on(table.entityId),
   uploadedByIdx: index('media_files_uploaded_by_idx').on(table.uploadedBy),
   createdAtIdx: index('media_files_created_at_idx').on(table.createdAt),
   isActiveIdx: index('media_files_is_active_idx').on(table.isActive),

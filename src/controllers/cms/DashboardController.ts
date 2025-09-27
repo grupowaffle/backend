@@ -52,7 +52,7 @@ export class DashboardController {
           return c.json({ success: false, error: 'Usuário não autenticado' }, 401);
         }
 
-        if (!['admin', 'editor-chefe', 'developer'].includes(user.role)) {
+        if (!['admin', 'editor-chefe', 'developer', 'super_admin'].includes(user.role)) {
           return c.json({
             success: false,
             error: 'Acesso negado. Apenas administradores, editores-chefe e desenvolvedores podem ver a visão geral.',
@@ -119,7 +119,7 @@ export class DashboardController {
         // Getting quick stats
 
         // Para usuários normais, mostrar apenas suas estatísticas
-        if (!['admin', 'editor-chefe'].includes(user.role)) {
+        if (!['admin', 'editor-chefe', 'developer', 'super_admin'].includes(user.role)) {
           const userDashboard = await this.dashboardService.getUserDashboard(user.id, user.role);
           
           return c.json({
@@ -166,10 +166,13 @@ export class DashboardController {
 
         // Getting recent activity
 
-        // Admins/editores-chefe veem toda atividade
-        if (['admin', 'editor-chefe'].includes(user.role)) {
+        // Admins/editores-chefe/developers veem toda atividade
+        console.log('👤 User role:', user.role);
+
+        if (['admin', 'editor-chefe', 'developer', 'super_admin'].includes(user.role)) {
           const overview = await this.dashboardService.getDashboardOverview();
-          
+          console.log('📊 Overview recentActivity:', overview.recentActivity.length);
+
           return c.json({
             success: true,
             data: overview.recentActivity.slice(0, limit),
@@ -220,6 +223,47 @@ export class DashboardController {
       }
     });
 
+    // Debug endpoint - verificar artigos no banco
+    this.app.get('/debug-articles', async (c) => {
+      try {
+        const user = c.get('user');
+        if (!user) {
+          return c.json({ success: false, error: 'Usuário não autenticado' }, 401);
+        }
+
+        // Buscar últimos 5 artigos diretamente
+        const db = getDrizzleClient(c.env);
+        const { articles } = await import('../../config/db/schema');
+        const { desc } = await import('drizzle-orm');
+
+        const recentArticles = await db
+          .select({
+            id: articles.id,
+            title: articles.title,
+            status: articles.status,
+            createdAt: articles.createdAt,
+            updatedAt: articles.updatedAt,
+            publishedAt: articles.publishedAt,
+          })
+          .from(articles)
+          .orderBy(desc(articles.updatedAt))
+          .limit(5);
+
+        return c.json({
+          success: true,
+          totalArticles: recentArticles.length,
+          articles: recentArticles,
+          message: recentArticles.length === 0 ? 'Nenhum artigo encontrado no banco de dados' : 'Artigos encontrados'
+        });
+      } catch (error) {
+        console.error('Debug error:', error);
+        return c.json({
+          success: false,
+          error: error instanceof Error ? error.message : 'Erro ao buscar artigos'
+        }, 500);
+      }
+    });
+
     // Health check do dashboard
     this.app.get('/health', async (c) => {
       try {
@@ -266,7 +310,7 @@ export class DashboardController {
         
         // Se é admin/editor-chefe, incluir dados globais
         let globalData = null;
-        if (['admin', 'editor-chefe'].includes(user.role)) {
+        if (['admin', 'editor-chefe', 'developer', 'super_admin'].includes(user.role)) {
           const overview = await this.dashboardService.getDashboardOverview();
           globalData = {
             inReview: overview.articlesOverview.inReview,

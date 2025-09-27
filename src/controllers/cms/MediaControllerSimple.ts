@@ -101,7 +101,7 @@ export class MediaControllerSimple {
         const url = await this.uploadToR2(file, file.name, c.env);
         console.log('✅ R2 upload completed, URL:', url);
 
-        // Salvar metadados no banco
+        // Salvar metadados no banco (apenas essenciais)
         const mediaRecord = await this.db
           .insert(mediaFiles)
           .values({
@@ -111,28 +111,40 @@ export class MediaControllerSimple {
             fileType: file.type,
             fileSize: file.size,
             r2Key: this.extractKeyFromUrl(url),
-            r2Url: url,
-            internalUrl: url, // URL pública direta
+            internalUrl: url,
             module: module,
             uploadedBy: user.id.toString(),
-            description: description,
+            description: description || null,
             tags: [],
             metadata: {},
-            isActive: true,
           })
           .returning();
 
         console.log(`✅ File uploaded successfully: ${mediaRecord[0].id}`);
 
+        // Transform response to match frontend UploadResponse interface
+        const transformedFile = {
+          id: mediaRecord[0].id,
+          filename: file.name,
+          originalName: file.name,
+          mimeType: file.type,
+          size: file.size,
+          url: url,
+          thumbnailUrl: file.type.startsWith('image/') ? url : undefined,
+          alt: file.name,
+          caption: description,
+          description: description,
+          tags: [],
+          folder: module,
+          isPublic: true,
+          uploadedBy: user.id.toString(),
+          uploadedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+
         return c.json({
           success: true,
-          data: {
-            id: mediaRecord[0].id,
-            url: url,
-            fileName: file.name,
-            fileType: file.type,
-            fileSize: file.size,
-          }
+          data: transformedFile
         });
 
       } catch (error) {
@@ -163,20 +175,48 @@ export class MediaControllerSimple {
         }
 
         const offset = (page - 1) * limit;
+
+        // Get total count
+        const totalResult = await this.db
+          .select({ count: sql<number>`count(*)` })
+          .from(mediaFiles)
+          .where(eq(mediaFiles.isActive, true));
+
+        const total = totalResult[0]?.count || 0;
+
         const files = await query
           .orderBy(desc(mediaFiles.createdAt))
           .limit(limit)
           .offset(offset);
 
+        // Transform files to match frontend MediaFile interface
+        const transformedFiles = files.map(file => ({
+          id: file.id,
+          filename: file.fileName,
+          originalName: file.originalFileName,
+          mimeType: file.fileType,
+          size: file.fileSize,
+          url: file.internalUrl,
+          thumbnailUrl: file.fileType.startsWith('image/') ? file.internalUrl : undefined,
+          alt: file.description || file.fileName,
+          caption: file.description,
+          description: file.description,
+          tags: file.tags || [],
+          folder: file.module,
+          isPublic: true, // For now, all files are public
+          uploadedBy: file.uploadedBy,
+          uploadedAt: file.createdAt.toISOString(),
+          updatedAt: file.updatedAt.toISOString(),
+        }));
+
         return c.json({
           success: true,
           data: {
-            files,
-            pagination: {
-              page,
-              limit,
-              hasMore: files.length === limit
-            }
+            files: transformedFiles,
+            total,
+            page,
+            limit,
+            totalPages: Math.ceil(total / limit),
           }
         });
 
@@ -554,6 +594,121 @@ export class MediaControllerSimple {
         }, 500);
       }
     });
+
+    // Estatísticas de mídia
+    this.app.get('/stats', async (c) => {
+      try {
+        const user = c.get('user');
+        console.log(`📊 Getting media stats for user ${user?.email}`);
+
+        // Get total files and size
+        const totalResult = await this.db
+          .select({
+            count: sql<number>`count(*)`,
+            totalSize: sql<number>`sum(${mediaFiles.fileSize})`
+          })
+          .from(mediaFiles)
+          .where(eq(mediaFiles.isActive, true));
+
+        // Get counts by type
+        const imageCount = await this.db
+          .select({ count: sql<number>`count(*)` })
+          .from(mediaFiles)
+          .where(and(
+            eq(mediaFiles.isActive, true),
+            sql`${mediaFiles.fileType} LIKE 'image/%'`
+          ));
+
+        const videoCount = await this.db
+          .select({ count: sql<number>`count(*)` })
+          .from(mediaFiles)
+          .where(and(
+            eq(mediaFiles.isActive, true),
+            sql`${mediaFiles.fileType} LIKE 'video/%'`
+          ));
+
+        const audioCount = await this.db
+          .select({ count: sql<number>`count(*)` })
+          .from(mediaFiles)
+          .where(and(
+            eq(mediaFiles.isActive, true),
+            sql`${mediaFiles.fileType} LIKE 'audio/%'`
+          ));
+
+        const documentCount = await this.db
+          .select({ count: sql<number>`count(*)` })
+          .from(mediaFiles)
+          .where(and(
+            eq(mediaFiles.isActive, true),
+            sql`${mediaFiles.fileType} LIKE 'application/%'`
+          ));
+
+        // Get recent uploads (last 7 days)
+        const weekAgo = new Date();
+        weekAgo.setDate(weekAgo.getDate() - 7);
+
+        const recentCount = await this.db
+          .select({ count: sql<number>`count(*)` })
+          .from(mediaFiles)
+          .where(and(
+            eq(mediaFiles.isActive, true),
+            sql`${mediaFiles.createdAt} >= ${weekAgo.toISOString()}`
+          ));
+
+        const stats = {
+          totalFiles: totalResult[0]?.count || 0,
+          totalSize: totalResult[0]?.totalSize || 0,
+          imagesCount: imageCount[0]?.count || 0,
+          videosCount: videoCount[0]?.count || 0,
+          audioCount: audioCount[0]?.count || 0,
+          documentsCount: documentCount[0]?.count || 0,
+          recentUploads: recentCount[0]?.count || 0,
+        };
+
+        return c.json({
+          success: true,
+          data: stats
+        });
+
+      } catch (error) {
+        console.error('Error getting media stats:', error);
+        return c.json({
+          success: false,
+          error: 'Failed to get media stats'
+        }, 500);
+      }
+    });
+
+    // Listar pastas (módulos)
+    this.app.get('/folders', async (c) => {
+      try {
+        const user = c.get('user');
+        console.log(`📁 Getting folders for user ${user?.email}`);
+
+        const folders = await this.db
+          .selectDistinct({ module: mediaFiles.module })
+          .from(mediaFiles)
+          .where(and(
+            eq(mediaFiles.isActive, true),
+            sql`${mediaFiles.module} IS NOT NULL`
+          ))
+          .orderBy(mediaFiles.module);
+
+        const folderNames = folders.map(f => f.module).filter(Boolean);
+
+        return c.json({
+          success: true,
+          data: folderNames
+        });
+
+      } catch (error) {
+        console.error('Error getting folders:', error);
+        return c.json({
+          success: false,
+          error: 'Failed to get folders'
+        }, 500);
+      }
+    });
   }
 
   /**
@@ -593,8 +748,12 @@ export class MediaControllerSimple {
    * Extrair chave da URL do R2
    */
   private extractKeyFromUrl(url: string): string {
-    const urlParts = url.split('/');
-    return urlParts.slice(3).join('/'); // Remove https://pub-hash.r2.dev/
+    // URL format: /api/cms/media/serve/uploads/1758982033341-filename.ext
+    // Extract: uploads/1758982033341-filename.ext
+    if (url.startsWith('/api/cms/media/serve/')) {
+      return url.replace('/api/cms/media/serve/', '');
+    }
+    return url;
   }
 
   /**

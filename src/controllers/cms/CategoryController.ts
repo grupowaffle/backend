@@ -165,21 +165,26 @@ export class CategoryController {
     this.app.delete('/:id', async (c) => {
       try {
         const id = c.req.param('id');
+        console.log('🗑️ [Backend] Recebida requisição para deletar categoria:', id);
 
         const success = await this.categoryRepository.delete(id);
+        console.log('🗑️ [Backend] Resultado da exclusão:', success);
 
         if (!success) {
+          console.log('❌ [Backend] Categoria não encontrada:', id);
           return c.json({
             success: false,
             error: 'Category not found',
           }, 404);
         }
 
+        console.log('✅ [Backend] Categoria excluída com sucesso:', id);
         return c.json({
           success: true,
           message: 'Category deleted successfully',
         });
       } catch (error) {
+        console.error('❌ [Backend] Erro ao deletar categoria:', error);
         // Error deleting category
         return c.json({
           success: false,

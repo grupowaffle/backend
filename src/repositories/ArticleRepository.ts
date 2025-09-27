@@ -1,6 +1,7 @@
 import { eq, and, or, desc, asc, count, sql, like, isNull, isNotNull, inArray, notInArray, ne } from 'drizzle-orm';
 import { BaseRepository, DatabaseType, PaginationOptions, PaginatedResult } from './BaseRepository';
 import { articles, categories, authors, media, Article, NewArticle } from '../config/db/schema';
+import { generateId } from '../lib/cuid';
 
 export interface ArticleFilters {
   status?: string | string[];
@@ -37,12 +38,51 @@ export class ArticleRepository extends BaseRepository {
    */
   async create(data: NewArticle): Promise<Article> {
     try {
+      console.log('Creating article with data:', JSON.stringify(data, null, 2));
+
+      // Start with only required fields
+      const insertData: any = {
+        id: data.id || generateId(),
+        title: data.title,
+        slug: data.slug,
+        content: data.content,
+        excerpt: data.excerpt,
+        status: data.status || 'draft',
+        source: data.source || 'manual',
+      };
+
+      // Add optional fields only if they exist
+      if (data.publishedAt) insertData.publishedAt = data.publishedAt;
+      if (data.scheduledFor) insertData.scheduledFor = data.scheduledFor;
+      if (data.seoTitle) insertData.seoTitle = data.seoTitle;
+      if (data.seoDescription) insertData.seoDescription = data.seoDescription;
+      if (data.seoKeywords) insertData.seoKeywords = data.seoKeywords;
+      if (data.categoryId) insertData.categoryId = data.categoryId;
+      if (data.tags) insertData.tags = data.tags;
+      if (data.sourceId) insertData.sourceId = data.sourceId;
+      if (data.sourceUrl) insertData.sourceUrl = data.sourceUrl;
+      if (data.newsletter) insertData.newsletter = data.newsletter;
+      if (data.isFeatured !== undefined) insertData.isFeatured = data.isFeatured;
+      if (data.featuredPosition) insertData.featuredPosition = data.featuredPosition;
+      if (data.featuredUntil) insertData.featuredUntil = data.featuredUntil;
+      if (data.featuredCategory) insertData.featuredCategory = data.featuredCategory;
+      if (data.featuredBy) insertData.featuredBy = data.featuredBy;
+      if (data.featuredImageId) insertData.featuredImageId = data.featuredImageId;
+      if (data.featuredImage) insertData.featuredImage = data.featuredImage;
+      if (data.galleryIds) insertData.galleryIds = data.galleryIds;
+      if (data.authorId) insertData.authorId = data.authorId;
+      if (data.editorId) insertData.editorId = data.editorId;
+
+      // Set featuredAt if article is featured
+      if (data.isFeatured) {
+        insertData.featuredAt = new Date();
+      }
+
+      console.log('Insert data:', JSON.stringify(insertData, null, 2));
+
       const [article] = await this.db
         .insert(articles)
-        .values({
-          ...data,
-          updatedAt: new Date(),
-        })
+        .values(insertData)
         .returning();
 
       return article;

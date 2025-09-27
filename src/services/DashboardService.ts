@@ -425,6 +425,8 @@ export class DashboardService {
    * Atividade recente
    */
   private async getRecentActivity(limit = 10) {
+    console.log('🔍 Buscando atividades recentes, limite:', limit);
+
     const recentArticles = await this.db
       .select({
         id: articles.id,
@@ -434,10 +436,18 @@ export class DashboardService {
         publishedAt: articles.publishedAt,
         source: articles.source,
         authorId: articles.authorId,
+        updatedAt: articles.updatedAt,
       })
       .from(articles)
       .orderBy(desc(articles.updatedAt))
       .limit(limit);
+
+    console.log('📊 Artigos encontrados:', recentArticles.length);
+    console.log('📝 Primeiros 3 artigos:', recentArticles.slice(0, 3).map(a => ({
+      title: a.title,
+      status: a.status,
+      updatedAt: a.updatedAt
+    })));
 
     const activity = [];
 
@@ -482,6 +492,9 @@ export class DashboardService {
         });
       }
     }
+
+    console.log('✅ Atividades geradas:', activity.length);
+    console.log('📌 Primeira atividade:', activity[0]);
 
     return activity.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
   }

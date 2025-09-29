@@ -45,16 +45,229 @@ export class TheNewsContentParser {
       const cleanHtml = this.cleanBeehiivHtml(rssContent);
       console.log(`🧹 Cleaned HTML length: ${cleanHtml.length} chars`);
 
-      // Use regex-based parsing for Cloudflare Workers compatibility
-      const result = this.extractNewsWithRegex(cleanHtml);
-      console.log(`🎯 Parser result: ${result.length} news items found`);
+      // Check if this is a night edition (title starts with "NIGHT")
+      const isNightEdition = this.isNightEdition(rssContent);
+      console.log(`🌙 Is Night Edition: ${isNightEdition}`);
 
+      let result: IndividualNews[];
+      if (isNightEdition) {
+        result = this.extractNightEditionNews(cleanHtml);
+      } else {
+        result = this.extractNewsWithRegex(cleanHtml);
+      }
+
+      console.log(`🎯 Parser result: ${result.length} news items found`);
       return result;
 
     } catch (error) {
       console.error('❌ Error extracting individual news:', error);
       return [];
     }
+  }
+
+  /**
+   * Check if this is a night edition based on content patterns
+   */
+  private isNightEdition(rssContent: string): boolean {
+    // Check for night-specific patterns
+    const nightPatterns = [
+      /BOA NOITE/i,
+      /NEED TO KNOW/i,
+      /AROUND THE WEB/i,
+      /DESCONTRAIR/i,
+      /até segunda!/i
+    ];
+
+    // If at least 2 night-specific patterns are found, consider it a night edition
+    const patternMatches = nightPatterns.filter(pattern => pattern.test(rssContent)).length;
+    return patternMatches >= 2;
+  }
+
+  /**
+   * Extract news from night edition (different structure)
+   */
+  private extractNightEditionNews(html: string): IndividualNews[] {
+    const noticias: IndividualNews[] = [];
+    let numeroNoticia = 1;
+
+    try {
+      console.log('🌙 Extracting Night Edition news...');
+
+      // Night edition uses h5 with large text for main news titles
+      // Pattern: <h5 style="text-align:center"><span style="font-size:2rem"><b>TITLE</b>
+      const mainNewsPattern = /<h5[^>]*style="[^"]*text-align:center[^"]*"[^>]*>[\s\S]*?<span[^>]*font-size:2rem[^>]*><b>([^<]+)<\/b>/gi;
+
+      // Split content by the main separator pattern (h1 with dots)
+      const separatorPattern = /<h1[^>]*style="[^"]*text-align:center[^"]*"[^>]*><span[^>]*>…\.<\/span><\/h1>/gi;
+      const sections = html.split(separatorPattern);
+
+      console.log(`📦 Found ${sections.length} sections separated by dots`);
+
+      for (let i = 0; i < sections.length; i++) {
+        const section = sections[i];
+
+        // Skip very short sections or sections with only template content
+        if (section.length < 100) {
+          continue;
+        }
+
+        // Look for main news title in this section
+        const titleMatch = mainNewsPattern.exec(section);
+        mainNewsPattern.lastIndex = 0; // Reset regex
+
+        if (!titleMatch) {
+          console.log(`⏭️ No main title found in section ${i + 1}`);
+          continue;
+        }
+
+        const tituloNoticia = titleMatch[1].trim();
+
+        // Skip sponsored content and non-news sections
+        const ignoredTitles = [
+          'BOA NOITE',
+          'NEED TO KNOW',
+          'AROUND THE WEB',
+          'DESCONTRAIR',
+          'FECHAMENTO DO MERCADO',
+          'GIVEAWAY DO THE NEWS',
+          'OPINIÃO DO LEITOR',
+          'QUEM SOMOS',
+          'até segunda!',
+          'FOTO DO DIA'
+        ];
+
+        const shouldIgnore = ignoredTitles.some(ignored =>
+          tituloNoticia.toUpperCase().includes(ignored)
+        ) ||
+        tituloNoticia.includes('APRESENTADO POR') ||
+        tituloNoticia.includes('COLLAB COM');
+
+        if (shouldIgnore) {
+          console.log(`⏭️ Skipping ignored section: ${tituloNoticia}`);
+          continue;
+        }
+
+        console.log(`📰 Found night edition news: "${tituloNoticia}"`);
+
+        // Extract content after the title
+        const titleEndIndex = section.indexOf(titleMatch[0]) + titleMatch[0].length;
+        let conteudoHtml = section.substring(titleEndIndex);
+
+        // Clean up content - remove country flags and center-aligned paragraphs that are just emojis
+        conteudoHtml = conteudoHtml.replace(/<p[^>]*style="[^"]*text-align:center[^"]*"[^>]*>[\s]*[🇧🇷🤖🎤✈️]+[\s]*<\/p>/gi, '');
+
+        // Extract first image
+        let primeiraImagem = '';
+        const imagePattern = /<img[^>]+src="([^"]+)"[^>]*>/i;
+        const imgMatch = imagePattern.exec(conteudoHtml);
+
+        if (imgMatch) {
+          primeiraImagem = this.cleanImageUrl(imgMatch[1]);
+          console.log(`🖼️ Found image: ${primeiraImagem}`);
+        }
+
+        // Extract external links
+        const linksExternos = this.extractExternalLinks(conteudoHtml);
+
+        // Generate summary from first paragraph
+        const resumo = this.generateNightSummary(conteudoHtml);
+
+        // Clean content
+        const conteudoLimpo = this.cleanHtmlAttributes(conteudoHtml);
+
+        // Determine category based on content or section
+        const categoria = this.determineNightCategory(tituloNoticia, conteudoLimpo);
+
+        const noticia: IndividualNews = {
+          numero: numeroNoticia,
+          titulo: tituloNoticia,
+          titulo_id: this.slugify(tituloNoticia),
+          categoria: categoria,
+          categoria_id: categoria.toLowerCase(),
+          conteudo_html: conteudoLimpo,
+          resumo: resumo,
+          imagem_principal: primeiraImagem,
+          fonte_imagem: '',
+          links_externos: linksExternos,
+          total_links: linksExternos.length,
+          id_inicio: `night-${numeroNoticia}`,
+          id_fim: `night-fim-${numeroNoticia}`
+        };
+
+        console.log(`✅ Created night edition news ${numeroNoticia}:`, {
+          titulo: noticia.titulo,
+          categoria: noticia.categoria,
+          contentLength: noticia.conteudo_html.length,
+          hasImage: !!noticia.imagem_principal,
+          linksCount: noticia.total_links
+        });
+
+        noticias.push(noticia);
+        numeroNoticia++;
+      }
+
+      console.log(`✅ Extracted ${noticias.length} night edition news articles`);
+      return noticias;
+
+    } catch (error) {
+      console.error('❌ Error in night edition extraction:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Generate summary from night edition content
+   */
+  private generateNightSummary(html: string): string {
+    if (!html) return '';
+
+    // Look for the first meaningful paragraph
+    const paragraphPattern = /<p[^>]*style="[^"]*text-align:left[^"]*"[^>]*>([^<]+(?:<[^>]*>[^<]*<\/[^>]*>[^<]*)*)<\/p>/i;
+    const match = paragraphPattern.exec(html);
+
+    if (match) {
+      const text = this.stripHtml(match[1]).trim();
+      return text.length > 200 ? text.substring(0, 200) + '...' : text;
+    }
+
+    // Fallback to general summary
+    return this.generateSummary(html);
+  }
+
+  /**
+   * Determine category for night edition news
+   */
+  private determineNightCategory(titulo: string, conteudo: string): string {
+    const text = (titulo + ' ' + conteudo).toLowerCase();
+
+    if (text.includes('brasil') || text.includes('brasileiro') || text.includes('ministério')) {
+      return 'BRASIL';
+    }
+    if (text.includes('tecnologia') || text.includes('ai') || text.includes('artificial') || text.includes('chatgpt')) {
+      return 'TECNOLOGIA';
+    }
+    if (text.includes('economia') || text.includes('dólar') || text.includes('empresa') || text.includes('contrato') || text.includes('milhões')) {
+      return 'ECONOMIA';
+    }
+    if (text.includes('mundial') || text.includes('internacional') || text.includes('país') || text.includes('irã') || text.includes('argentina')) {
+      return 'MUNDO';
+    }
+
+    return 'GERAL';
+  }
+
+  /**
+   * Create URL-friendly slug from text
+   */
+  private slugify(text: string): string {
+    return text
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '') // Remove diacritics
+      .replace(/[^a-z0-9\s-]/g, '') // Remove special characters
+      .replace(/\s+/g, '-') // Replace spaces with hyphens
+      .replace(/-+/g, '-') // Replace multiple hyphens with single
+      .trim();
   }
 
   /**

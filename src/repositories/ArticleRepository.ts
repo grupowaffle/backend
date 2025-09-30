@@ -39,15 +39,12 @@ export class ArticleRepository extends BaseRepository {
    */
   private async syncArticleTags(articleId: string, tagNames: string[]): Promise<void> {
     try {
-      console.log(`🏷️ Syncing tags for article ${articleId}:`, tagNames);
-
       // Remove existing tags for this article
       await this.db
         .delete(articleTags)
         .where(eq(articleTags.articleId, articleId));
 
       if (!tagNames || tagNames.length === 0) {
-        console.log(`🏷️ No tags to sync for article ${articleId}`);
         return;
       }
 
@@ -191,11 +188,26 @@ export class ArticleRepository extends BaseRepository {
         if (result.length === 0) return null;
 
         const { article, category, author, featuredMedia } = result[0];
+
+        // Buscar tags do artigo
+        const articleTagsResult = await this.db
+          .select({
+            tag: tags,
+          })
+          .from(articleTags)
+          .leftJoin(tags, eq(articleTags.tagId, tags.id))
+          .where(eq(articleTags.articleId, id));
+
+        const articleTagsList = articleTagsResult
+          .map(result => result.tag)
+          .filter(tag => tag !== null);
+
         return {
           ...article,
           category,
           author,
           featuredMedia,
+          tags: articleTagsList,
         } as any;
       }
 
@@ -272,9 +284,7 @@ export class ArticleRepository extends BaseRepository {
 
       // Sync tags to article_tags table if tags are provided
       if (data.tags !== undefined) {
-        console.log(`🏷️ Update - received tags:`, data.tags);
         const tagNames = Array.isArray(data.tags) ? data.tags as string[] : [];
-        console.log(`🏷️ Update - parsed tag names:`, tagNames);
         await this.syncArticleTags(id, tagNames);
       }
 
@@ -300,6 +310,35 @@ export class ArticleRepository extends BaseRepository {
       this.handleError(error, 'delete article');
       throw error;
     }
+  }
+
+  /**
+   * Get tags for multiple articles
+   */
+  private async getTagsForArticles(articleIds: string[]): Promise<Map<string, any[]>> {
+    if (articleIds.length === 0) return new Map();
+
+    const tagsResult = await this.db
+      .select({
+        articleId: articleTags.articleId,
+        tag: tags,
+      })
+      .from(articleTags)
+      .leftJoin(tags, eq(articleTags.tagId, tags.id))
+      .where(inArray(articleTags.articleId, articleIds));
+
+    const tagsMap = new Map<string, any[]>();
+
+    for (const result of tagsResult) {
+      if (result.tag) {
+        if (!tagsMap.has(result.articleId)) {
+          tagsMap.set(result.articleId, []);
+        }
+        tagsMap.get(result.articleId)!.push(result.tag);
+      }
+    }
+
+    return tagsMap;
   }
 
   /**
@@ -351,7 +390,35 @@ export class ArticleRepository extends BaseRepository {
       // Apply pagination
       query = this.applyPagination(query, paginationOptions);
 
-      return this.createPaginatedResult(query, countQuery, paginationOptions);
+      const result = await this.createPaginatedResult(query, countQuery, paginationOptions);
+
+      // Se includeRelations, buscar tags para todos os artigos
+      if (includeRelations && result.data.length > 0) {
+        const articleIds = result.data.map((item: any) => item.article?.id || item.id);
+        const tagsMap = await this.getTagsForArticles(articleIds);
+
+        result.data = result.data.map((item: any) => {
+          const articleId = item.article?.id || item.id;
+          const articleTags = tagsMap.get(articleId) || [];
+
+          if (item.article) {
+            return {
+              ...item,
+              article: {
+                ...item.article,
+                tags: articleTags,
+              },
+            };
+          }
+
+          return {
+            ...item,
+            tags: articleTags,
+          };
+        });
+      }
+
+      return result;
     } catch (error) {
       this.handleError(error, 'list articles');
       throw error;

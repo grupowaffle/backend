@@ -317,6 +317,9 @@ export class ArticleController {
           editorId: user?.id?.toString() || null, // Track who edited
         };
 
+        console.log('🎯 Controller - received data.tags:', data.tags);
+        console.log('🎯 Controller - updateData.tags:', updateData.tags);
+
         if (data.publishedAt) {
           updateData.publishedAt = new Date(data.publishedAt);
         }

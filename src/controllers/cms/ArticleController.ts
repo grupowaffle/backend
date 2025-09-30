@@ -6,6 +6,9 @@ import { NewArticle } from '../../config/db/schema';
 import { generateId } from '../../lib/cuid';
 import { AuthorSyncService } from '../../services/AuthorSyncService';
 import { getDrizzleClient } from '../../config/db';
+import { ISlugService, SlugService } from '../core/ISlugService';
+import { IExportService, ArticleExportService } from '../core/IExportService';
+import { IAuthorizationService, ArticleAuthorizationService } from '../core/IAuthorizationService';
 
 // Validation schemas
 const createArticleSchema = z.object({
@@ -49,16 +52,34 @@ const listArticlesSchema = z.object({
   includeRelations: z.string().transform(val => val === 'true').default('false'),
 });
 
+/**
+ * Article Controller following SOLID principles:
+ * - Single Responsibility: Only handles HTTP routing and request/response
+ * - Dependency Inversion: Depends on abstractions (interfaces)
+ * - Open/Closed: Open for extension through composition
+ */
 export class ArticleController {
   private app: Hono;
   private articleRepository: ArticleRepository;
   private authorSyncService: AuthorSyncService;
+  private slugService: ISlugService;
+  private exportService: IExportService;
+  private authorizationService: IAuthorizationService;
 
-  constructor(articleRepository: ArticleRepository, env: any) {
+  constructor(
+    articleRepository: ArticleRepository,
+    env: any,
+    slugService?: ISlugService,
+    exportService?: IExportService,
+    authorizationService?: IAuthorizationService
+  ) {
     this.app = new Hono();
     this.articleRepository = articleRepository;
     const db = getDrizzleClient(env);
     this.authorSyncService = new AuthorSyncService(db);
+    this.slugService = slugService || new SlugService();
+    this.exportService = exportService || new ArticleExportService();
+    this.authorizationService = authorizationService || new ArticleAuthorizationService();
     this.setupRoutes();
   }
 
@@ -144,9 +165,9 @@ export class ArticleController {
         const data = c.req.valid('json');
         const user = c.get('user');
 
-        // Generate slug if not provided
+        // Generate slug if not provided (delegates to SlugService)
         if (!data.slug) {
-          data.slug = this.generateSlug(data.title);
+          data.slug = this.slugService.generateSlug(data.title);
         }
 
         // Ensure author exists for the current user
@@ -218,10 +239,10 @@ export class ArticleController {
           includeRelations: true, // Include relations for better export data
         });
 
-        // Generate export content based on format
+        // Generate export content based on format (delegates to ExportService)
         if (params.format === 'csv') {
-          const csvContent = this.generateCSV(result.data);
-          
+          const csvContent = this.exportService.generateCSV(result.data);
+
           return new Response(csvContent, {
             headers: {
               'Content-Type': 'text/csv;charset=utf-8',
@@ -230,8 +251,8 @@ export class ArticleController {
           });
         } else {
           // For now, default to CSV for other formats
-          const csvContent = this.generateCSV(result.data);
-          
+          const csvContent = this.exportService.generateCSV(result.data);
+
           return new Response(csvContent, {
             headers: {
               'Content-Type': 'text/csv;charset=utf-8',
@@ -527,8 +548,8 @@ export class ArticleController {
           return c.json({ success: false, error: 'Usuário não autenticado' }, 401);
         }
 
-        // Verificar se o usuário tem permissão para publicar
-        if (!['admin', 'editor-chefe', 'editor', 'developer', 'super_admin'].includes(user.role)) {
+        // Verificar se o usuário tem permissão para publicar (delegates to AuthorizationService)
+        if (!this.authorizationService.canPublish(user.role)) {
           return c.json({
             success: false,
             error: 'Permissão insuficiente para publicar artigos',
@@ -598,8 +619,8 @@ export class ArticleController {
           return c.json({ success: false, error: 'Usuário não autenticado' }, 401);
         }
 
-        // Verificar se o usuário tem permissão para despublicar
-        if (!['admin', 'editor-chefe', 'editor', 'developer', 'super_admin'].includes(user.role)) {
+        // Verificar se o usuário tem permissão para despublicar (delegates to AuthorizationService)
+        if (!this.authorizationService.canUnpublish(user.role)) {
           return c.json({
             success: false,
             error: 'Permissão insuficiente para despublicar artigos',
@@ -653,71 +674,6 @@ export class ArticleController {
     });
   }
 
-  /**
-   * Generate slug from title
-   */
-  private generateSlug(title: string): string {
-    return title
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '') // Remove accents
-      .replace(/[^a-z0-9\s-]/g, '') // Remove special characters
-      .trim()
-      .replace(/\s+/g, '-') // Replace spaces with hyphens
-      .replace(/-+/g, '-') // Remove multiple consecutive hyphens
-      .substring(0, 100); // Limit length
-  }
-
-  /**
-   * Generate CSV content from articles array
-   */
-  private generateCSV(articles: any[]): string {
-    // CSV headers
-    const headers = [
-      'ID',
-      'Título',
-      'Slug',
-      'Status',
-      'Categoria',
-      'Autor',
-      'Visualizações',
-      'Likes',
-      'Shares',
-      'Criado em',
-      'Publicado em',
-      'Resumo'
-    ];
-
-    // Generate CSV rows
-    const rows = articles.map(item => {
-      const article = item.article || item;
-      const category = item.category;
-      const author = item.author;
-      
-      return [
-        article.id || '',
-        (article.title || '').replace(/"/g, '""'), // Escape quotes
-        article.slug || '',
-        article.status || '',
-        category?.name || '',
-        author?.name || '',
-        article.views || 0,
-        article.likes || 0,
-        article.shares || 0,
-        article.createdAt ? new Date(article.createdAt).toLocaleDateString('pt-BR') : '',
-        article.publishedAt ? new Date(article.publishedAt).toLocaleDateString('pt-BR') : '',
-        (article.excerpt || '').replace(/"/g, '""').substring(0, 200) // Limit excerpt and escape quotes
-      ];
-    });
-
-    // Combine headers and rows
-    const csvContent = [headers, ...rows]
-      .map(row => row.map(field => `"${field}"`).join(','))
-      .join('\n');
-
-    // Add BOM for UTF-8 to ensure proper encoding in Excel
-    return '\uFEFF' + csvContent;
-  }
 
   /**
    * Get the Hono app

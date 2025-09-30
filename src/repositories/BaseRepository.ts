@@ -1,115 +1,69 @@
 import { DrizzleD1Database } from 'drizzle-orm/d1';
 import { NeonDatabase } from 'drizzle-orm/neon-serverless';
-import { eq, and, or, desc, asc, count, sql } from 'drizzle-orm';
 import * as schema from '../config/db/schema';
+import { IErrorHandler, DatabaseErrorHandler } from './core/IErrorHandler';
+import {
+  IPaginationService,
+  PaginationService,
+  PaginationOptions,
+  PaginatedResult
+} from './core/IPaginationService';
 
 export type DatabaseType = DrizzleD1Database<typeof schema> | NeonDatabase<typeof schema>;
 
-export interface PaginationOptions {
-  page?: number;
-  limit?: number;
-  sortBy?: string;
-  sortOrder?: 'asc' | 'desc';
-}
+// Export interfaces for use in other files
+export { PaginationOptions, PaginatedResult };
 
-export interface PaginatedResult<T> {
-  data: T[];
-  pagination: {
-    page: number;
-    limit: number;
-    total: number;
-    totalPages: number;
-  };
-}
-
+/**
+ * Base repository following SOLID principles:
+ * - Single Responsibility: Only manages database connection
+ * - Dependency Inversion: Depends on abstractions (interfaces)
+ * - Open/Closed: Open for extension through composition
+ */
 export class BaseRepository {
   protected db: DatabaseType;
+  protected errorHandler: IErrorHandler;
+  protected paginationService: IPaginationService;
 
-  constructor(db: DatabaseType) {
+  constructor(
+    db: DatabaseType,
+    errorHandler?: IErrorHandler,
+    paginationService?: IPaginationService
+  ) {
     this.db = db;
+    this.errorHandler = errorHandler || new DatabaseErrorHandler();
+    this.paginationService = paginationService || new PaginationService();
   }
 
   /**
-   * Apply pagination to a query
+   * Apply pagination to a query (delegates to PaginationService)
    */
   protected applyPagination(query: any, options: PaginationOptions) {
-    const page = Math.max(1, options.page || 1);
-    const limit = Math.min(100, Math.max(1, options.limit || 20));
-    const offset = (page - 1) * limit;
-
-    return query.limit(limit).offset(offset);
+    return this.paginationService.applyPagination(query, options);
   }
 
   /**
-   * Apply sorting to a query
+   * Apply sorting to a query (delegates to PaginationService)
    */
   protected applySorting(query: any, table: any, options: PaginationOptions) {
-    if (!options.sortBy) return query;
-
-    const column = table[options.sortBy];
-    if (!column) return query;
-
-    const sortFn = options.sortOrder === 'desc' ? desc : asc;
-    return query.orderBy(sortFn(column));
+    return this.paginationService.applySorting(query, table, options);
   }
 
   /**
-   * Create paginated result
+   * Create paginated result (delegates to PaginationService)
    */
   protected async createPaginatedResult<T>(
     baseQuery: any,
     countQuery: any,
     options: PaginationOptions
   ): Promise<PaginatedResult<T>> {
-    const page = Math.max(1, options.page || 1);
-    const limit = Math.min(100, Math.max(1, options.limit || 20));
-
-    // Get total count
-    const [countResult] = await countQuery;
-    const total = Number(countResult.count);
-
-    // Get data
-    const data = await baseQuery;
-
-    return {
-      data,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
-    };
+    return this.paginationService.createPaginatedResult<T>(baseQuery, countQuery, options);
   }
 
   /**
-   * Handle database errors
+   * Handle database errors (delegates to ErrorHandler)
    */
-  protected handleError(error: any, operation: string) {
-    console.error(`Database error during ${operation}:`, error);
-    console.error('Error details:', {
-      message: error?.message,
-      code: error?.code,
-      detail: error?.detail,
-      hint: error?.hint,
-      stack: error?.stack
-    });
-
-    if (error.code === '23505') {
-      throw new Error('Record already exists');
-    }
-    if (error.code === '23503') {
-      throw new Error('Referenced record does not exist');
-    }
-    if (error.code === '23514') {
-      throw new Error('Check constraint violation');
-    }
-
-    // Se houver uma mensagem de erro específica, usar ela
-    if (error?.message) {
-      throw new Error(`Database operation failed: ${operation} - ${error.message}`);
-    }
-
-    throw new Error(`Database operation failed: ${operation}`);
+  protected handleError(error: any, operation: string): never {
+    return this.errorHandler.handle(error, operation);
   }
 }

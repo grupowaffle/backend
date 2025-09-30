@@ -1,6 +1,6 @@
 import { eq, and, or, desc, asc, count, sql, like, isNull, isNotNull, inArray, notInArray, ne } from 'drizzle-orm';
 import { BaseRepository, DatabaseType, PaginationOptions, PaginatedResult } from './BaseRepository';
-import { articles, categories, authors, media, Article, NewArticle } from '../config/db/schema';
+import { articles, categories, authors, media, tags, articleTags, Article, NewArticle } from '../config/db/schema';
 import { generateId } from '../lib/cuid';
 
 export interface ArticleFilters {
@@ -31,6 +31,74 @@ export interface ArticleListOptions extends PaginationOptions {
 export class ArticleRepository extends BaseRepository {
   constructor(db: DatabaseType) {
     super(db);
+  }
+
+  /**
+   * Sync tags from JSON field to article_tags table
+   * This ensures tags are queryable and can be used in relations
+   */
+  private async syncArticleTags(articleId: string, tagNames: string[]): Promise<void> {
+    try {
+      // Remove existing tags for this article
+      await this.db
+        .delete(articleTags)
+        .where(eq(articleTags.articleId, articleId));
+
+      if (!tagNames || tagNames.length === 0) {
+        return;
+      }
+
+      // For each tag name, find or create the tag, then link to article
+      for (const tagName of tagNames) {
+        if (!tagName || typeof tagName !== 'string') continue;
+
+        // Try to find existing tag by name
+        const existingTags = await this.db
+          .select()
+          .from(tags)
+          .where(eq(tags.name, tagName))
+          .limit(1);
+
+        let tagId: string;
+
+        if (existingTags.length > 0) {
+          tagId = existingTags[0].id;
+        } else {
+          // Create new tag
+          const slug = tagName
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^a-z0-9\s-]/g, '')
+            .trim()
+            .replace(/\s+/g, '-')
+            .replace(/-+/g, '-');
+
+          const [newTag] = await this.db
+            .insert(tags)
+            .values({
+              id: generateId(),
+              name: tagName,
+              slug: slug,
+            })
+            .returning();
+
+          tagId = newTag.id;
+        }
+
+        // Link tag to article
+        await this.db
+          .insert(articleTags)
+          .values({
+            articleId: articleId,
+            tagId: tagId,
+          })
+          .onConflictDoNothing(); // Ignore if already exists
+      }
+    } catch (error) {
+      console.error('Error syncing article tags:', error);
+      // Don't throw - tags sync is not critical
+    }
   }
 
   /**
@@ -84,6 +152,11 @@ export class ArticleRepository extends BaseRepository {
         .insert(articles)
         .values(insertData)
         .returning();
+
+      // Sync tags to article_tags table
+      if (data.tags && Array.isArray(data.tags)) {
+        await this.syncArticleTags(article.id, data.tags as string[]);
+      }
 
       return article;
     } catch (error) {
@@ -193,6 +266,12 @@ export class ArticleRepository extends BaseRepository {
         })
         .where(eq(articles.id, id))
         .returning();
+
+      // Sync tags to article_tags table if tags are provided
+      if (data.tags !== undefined) {
+        const tagNames = Array.isArray(data.tags) ? data.tags as string[] : [];
+        await this.syncArticleTags(id, tagNames);
+      }
 
       return article || null;
     } catch (error) {

@@ -39,12 +39,15 @@ export class ArticleRepository extends BaseRepository {
    */
   private async syncArticleTags(articleId: string, tagNames: string[]): Promise<void> {
     try {
+      console.log(`🏷️ Syncing tags for article ${articleId}:`, tagNames);
+
       // Remove existing tags for this article
       await this.db
         .delete(articleTags)
         .where(eq(articleTags.articleId, articleId));
 
       if (!tagNames || tagNames.length === 0) {
+        console.log(`🏷️ No tags to sync for article ${articleId}`);
         return;
       }
 
@@ -269,7 +272,9 @@ export class ArticleRepository extends BaseRepository {
 
       // Sync tags to article_tags table if tags are provided
       if (data.tags !== undefined) {
+        console.log(`🏷️ Update - received tags:`, data.tags);
         const tagNames = Array.isArray(data.tags) ? data.tags as string[] : [];
+        console.log(`🏷️ Update - parsed tag names:`, tagNames);
         await this.syncArticleTags(id, tagNames);
       }
 

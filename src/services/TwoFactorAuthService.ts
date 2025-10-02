@@ -8,7 +8,7 @@ import { generateId } from '../lib/cuid';
 import speakeasy from 'speakeasy';
 import QRCode from 'qrcode';
 import { eq } from 'drizzle-orm';
-import { users } from '../config/db/schema';
+// Users table removed - using D1 for user management
 import crypto from 'crypto';
 
 export interface TwoFactorSetupResult {

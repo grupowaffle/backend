@@ -1,7 +1,6 @@
-import { DrizzleClient } from '../config/db';
-import { authors } from '../config/db/schema';
+import { DatabaseType } from './BaseRepository';
+import { authors, users, articles } from '../config/db/schema';
 import { eq, desc, and, like, sql, count } from 'drizzle-orm';
-import { BaseRepository } from './BaseRepository';
 
 export interface Author {
   id: string;
@@ -34,10 +33,8 @@ export interface AuthorListOptions {
   filters?: AuthorFilters;
 }
 
-export class AuthorRepository extends BaseRepository {
-  constructor(db: DrizzleClient) {
-    super(db);
-  }
+export class AuthorRepository {
+  constructor(private db: DatabaseType) {}
 
   async findById(id: string): Promise<Author | null> {
     const result = await this.db
@@ -46,7 +43,25 @@ export class AuthorRepository extends BaseRepository {
       .where(eq(authors.id, id))
       .limit(1);
 
-    return result[0] || null;
+    if (!result[0]) {
+      return null;
+    }
+
+    const author = result[0];
+
+    // Count published articles for this author
+    const articleCountResult = await this.db
+      .select({ count: sql<number>`COUNT(*)` })
+      .from(articles)
+      .where(and(
+        eq(articles.authorId, author.id),
+        eq(articles.status, 'published')
+      ));
+
+    return {
+      ...author,
+      articleCount: Number(articleCountResult[0]?.count || 0),
+    };
   }
 
   async findBySlug(slug: string): Promise<Author | null> {
@@ -56,47 +71,70 @@ export class AuthorRepository extends BaseRepository {
       .where(eq(authors.slug, slug))
       .limit(1);
 
-    return result[0] || null;
+    if (!result[0]) {
+      return null;
+    }
+
+    const author = result[0];
+
+    // Count published articles for this author
+    const articleCountResult = await this.db
+      .select({ count: sql<number>`COUNT(*)` })
+      .from(articles)
+      .where(and(
+        eq(articles.authorId, author.id),
+        eq(articles.status, 'published')
+      ));
+
+    return {
+      ...author,
+      articleCount: Number(articleCountResult[0]?.count || 0),
+    };
   }
 
   async list(options: AuthorListOptions): Promise<{ data: Author[]; pagination: any }> {
-    const { page, limit, sortBy = 'name', sortOrder = 'asc', filters = {} } = options;
-    const offset = (page - 1) * limit;
+    const { page, limit } = options;
+    
+    try {
+      // Simple approach: get all authors first
+      const allAuthors = await this.db
+        .select()
+        .from(authors)
+        .where(eq(authors.isActive, true))
+        .limit(limit);
 
-    // Build where conditions
-    const whereConditions = this.buildWhereConditions(filters);
+      // For each author, count their published articles only
+      const data = await Promise.all(allAuthors.map(async (author) => {
+        const articleCount = await this.db
+          .select({ count: sql<number>`COUNT(*)` })
+          .from(articles)
+          .where(and(
+            eq(articles.authorId, author.id),
+            eq(articles.status, 'published')
+          ));
 
-    // Build order by
-    const orderBy = this.buildOrderBy(sortBy, sortOrder);
+        return {
+          ...author,
+          articleCount: articleCount[0]?.count || 0,
+        };
+      }));
 
-    // Get total count
-    const totalResult = await this.db
-      .select({ count: count() })
-      .from(authors)
-      .where(whereConditions || undefined);
-
-    const total = totalResult[0]?.count || 0;
-
-    // Get authors
-    const data = await this.db
-      .select()
-      .from(authors)
-      .where(whereConditions || undefined)
-      .orderBy(orderBy)
-      .limit(limit)
-      .offset(offset);
-
-    return {
-      data,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-        hasNext: page < Math.ceil(total / limit),
-        hasPrev: page > 1,
-      },
-    };
+      // Return all active authors (not just those with published articles)
+      return {
+        data: data,
+        pagination: {
+          page,
+          limit,
+          total: data.length,
+          totalPages: 1,
+          hasNext: false,
+          hasPrev: false,
+        },
+      };
+    } catch (error) {
+      console.error('❌ Error in AuthorRepository.list:', error);
+      throw error;
+    }
   }
 
   async listActive(): Promise<Author[]> {

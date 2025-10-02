@@ -9,8 +9,8 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { eq, and, or, desc, asc, count, sql, gte, lte, isNull, isNotNull } from 'drizzle-orm';
 import { 
-  users, userSessions, userInvitations, auditLogs, securityEvents, 
-  permissionDefinitions, User, NewUser, UserSession, UserInvitation 
+  userSessions, userInvitations, auditLogs, securityEvents, 
+  permissionDefinitions, UserSession, UserInvitation 
 } from '../config/db/schema';
 import { CloudflareD1Client } from '../config/types/auth';
 

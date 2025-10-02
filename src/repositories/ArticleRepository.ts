@@ -60,6 +60,7 @@ export class ArticleRepository extends BaseRepository {
           .limit(1);
 
         let tagId: string;
+        let isNewTag = false;
 
         if (existingTags.length > 0) {
           tagId = existingTags[0].id;
@@ -84,6 +85,7 @@ export class ArticleRepository extends BaseRepository {
             .returning();
 
           tagId = newTag.id;
+          isNewTag = true;
         }
 
         // Link tag to article
@@ -94,6 +96,27 @@ export class ArticleRepository extends BaseRepository {
             tagId: tagId,
           })
           .onConflictDoNothing(); // Ignore if already exists
+
+        // Update useCount for the tag
+        if (isNewTag) {
+          // New tag starts with useCount = 1
+          await this.db
+            .update(tags)
+            .set({
+              useCount: 1,
+              updatedAt: new Date(),
+            })
+            .where(eq(tags.id, tagId));
+        } else {
+          // Existing tag - increment useCount
+          await this.db
+            .update(tags)
+            .set({
+              useCount: sql`${tags.useCount} + 1`,
+              updatedAt: new Date(),
+            })
+            .where(eq(tags.id, tagId));
+        }
       }
     } catch (error) {
       console.error('Error syncing article tags:', error);

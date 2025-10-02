@@ -1,7 +1,7 @@
 import { Env } from '../config/types/common';
 import { TestUser } from '../config/types/health';
 import { getDrizzleClient, getDatabaseType } from '../lib/database';
-import { users } from '../config/db/schema';
+// Users table removed - using D1 for user management
 import { count } from 'drizzle-orm';
 
 export class HealthRepository {

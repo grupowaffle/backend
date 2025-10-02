@@ -41,12 +41,32 @@ export const ultraCacheMiddleware = async (c: Context<{ Bindings: Env }>, next: 
 
   // Rotas que devem usar cache ultra-agressivo
   const cacheableRoutes = [
-    '/api/*',
+    '/api/public/*', // Apenas rotas públicas
   ];
 
-  const shouldCache = cacheableRoutes.some(route => path.includes(route));
+  // Rotas que NÃO devem ser cacheadas (administração)
+  const noCacheRoutes = [
+    '/api/cms/',
+    '/api/auth/',
+    '/api/admin/',
+  ];
+
+  // Verifica se é uma rota CMS (mais específico)
+  const isCmsRoute = path.startsWith('/api/cms/');
+  const isAuthRoute = path.startsWith('/api/auth/');
+  const isAdminRoute = path.startsWith('/api/admin/');
+
+  const shouldCache = cacheableRoutes.some(route => path.includes(route)) && 
+                     !isCmsRoute && !isAuthRoute && !isAdminRoute;
   
   if (!shouldCache) {
+    // Para rotas CMS, adiciona headers explícitos de no-cache
+    if (isCmsRoute || isAuthRoute || isAdminRoute) {
+      c.header('Cache-Control', 'no-cache, no-store, must-revalidate');
+      c.header('Pragma', 'no-cache');
+      c.header('Expires', '0');
+      c.header('X-Cache', 'DISABLED');
+    }
     await next();
     return;
   }
@@ -87,7 +107,7 @@ export const ultraCacheMiddleware = async (c: Context<{ Bindings: Env }>, next: 
             data: null, // Será preenchido por requisições futuras
             headers: {
               'Content-Type': 'application/json',
-              'Cache-Control': 'public, max-age=1800', // 30 minutos
+              'Cache-Control': 'public, max-age=300', // 5 minutos para rotas públicas
               'X-Cache': 'MISS',
               'X-Cache-Time': `${Date.now() - startTime}ms`
             },
@@ -125,7 +145,7 @@ function generateCacheKey(path: string, query: Record<string, string>): string {
  */
 function isValidCacheData(data: CachedResponse): boolean {
   const now = Date.now();
-  const maxAge = 30 * 60 * 1000; // 30 minutos
+  const maxAge = 5 * 60 * 1000; // 5 minutos para rotas públicas
   
   return !!(data && 
            data.timestamp && 

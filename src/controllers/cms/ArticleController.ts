@@ -2,13 +2,14 @@ import { Hono } from 'hono';
 import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { ArticleRepository } from '../../repositories';
-import { NewArticle } from '../../config/db/schema';
+import { NewArticle, authors } from '../../config/db/schema';
 import { generateId } from '../../lib/cuid';
 import { AuthorSyncService } from '../../services/AuthorSyncService';
 import { getDrizzleClient } from '../../config/db';
 import { ISlugService, SlugService } from '../core/ISlugService';
 import { IExportService, ArticleExportService } from '../core/IExportService';
 import { IAuthorizationService, ArticleAuthorizationService } from '../core/IAuthorizationService';
+import { eq } from 'drizzle-orm';
 
 // Validation schemas
 const createArticleSchema = z.object({
@@ -84,6 +85,16 @@ export class ArticleController {
   }
 
   private setupRoutes() {
+    // Test endpoint para verificar se o código está atualizado
+    this.app.get('/version-check', async (c) => {
+      return c.json({
+        success: true,
+        message: 'ArticleController - VERSÃO ATUALIZADA COM SYNC AUTOMÁTICO',
+        timestamp: new Date().toISOString(),
+        codeVersion: '2.0-AUTO-SYNC'
+      });
+    });
+
     // Debug endpoint (temporary - remove in production)
     this.app.get('/debug', async (c) => {
       try {
@@ -110,6 +121,7 @@ export class ArticleController {
               title: article.title,
               source: article.source || 'manual',
               status: article.status,
+              authorId: article.authorId,
               createdAt: article.createdAt
             }))
           },
@@ -119,6 +131,57 @@ export class ArticleController {
         return c.json({
           success: false,
           error: 'Failed to fetch debug data',
+        }, 500);
+      }
+    });
+
+    // Debug endpoint for testing author sync
+    this.app.post('/debug-author-sync', async (c) => {
+      try {
+        const user = c.get('user');
+        
+        if (!user) {
+          return c.json({
+            success: false,
+            error: 'Usuário não autenticado',
+          }, 401);
+        }
+
+        console.log('🔍 [DEBUG] === TESTE DE SINCRONIZAÇÃO ===');
+        console.log('🔍 [DEBUG] User data from D1:', user);
+        
+        // Test author sync
+        const authorId = await this.authorSyncService.ensureAuthorForUser(user.id.toString(), user);
+        
+        // Get author details
+        let authorDetails = null;
+        if (authorId) {
+          const author = await this.db
+            .select()
+            .from(authors)
+            .where(eq(authors.id, authorId))
+            .limit(1);
+          authorDetails = author[0] || null;
+        }
+        
+        return c.json({
+          success: true,
+          data: {
+            user: {
+              id: user.id,
+              email: user.email,
+              name: user.name
+            },
+            authorId: authorId,
+            authorDetails: authorDetails,
+            message: authorId ? 'Autor sincronizado com sucesso' : 'Falha ao sincronizar autor'
+          },
+        });
+      } catch (error) {
+        console.error('❌ [DEBUG] Error in author sync:', error);
+        return c.json({
+          success: false,
+          error: 'Erro ao testar sincronização de autor',
         }, 500);
       }
     });
@@ -165,22 +228,41 @@ export class ArticleController {
         const data = c.req.valid('json');
         const user = c.get('user');
 
+        console.log('🔍 [CREATE ARTICLE] === PAYLOAD COMPLETO DO FRONTEND ===');
+        console.log('🔍 [CREATE ARTICLE] Data recebido:', JSON.stringify(data, null, 2));
+        console.log('🔍 [CREATE ARTICLE] User context:', JSON.stringify(user, null, 2));
+
         // Generate slug if not provided (delegates to SlugService)
         if (!data.slug) {
           data.slug = this.slugService.generateSlug(data.title);
         }
 
-        // Ensure author exists for the current user
-        let authorId = data.authorId;
-        if (!authorId && user?.id) {
-          authorId = await this.authorSyncService.getAuthorIdForUser(user.id.toString());
+        // SEMPRE sincronizar o autor com base no usuário logado
+        // Ignorar authorId vindo do frontend (pode ser o ID do D1 ao invés do Neon)
+        let authorId = null;
+        console.log('🔍 [CREATE ARTICLE] === INÍCIO DA CRIAÇÃO ===');
+        console.log('🔍 [CREATE ARTICLE] User data:', { 
+          userId: user?.id, 
+          userEmail: user?.email, 
+          userName: user?.name,
+          providedAuthorId: data.authorId,
+          willIgnoreProvidedAuthorId: true
+        });
+        
+        if (user?.id) {
+          console.log('🔄 [CREATE ARTICLE] Iniciando sincronização de autor...');
+          // SEMPRE passar dados do usuário D1 para criar/atualizar autor no Neon
+          authorId = await this.authorSyncService.ensureAuthorForUser(user.id.toString(), user);
+          console.log('✅ [CREATE ARTICLE] Resultado da sincronização:', { authorId, success: !!authorId });
+        } else {
+          console.log('⚠️ [CREATE ARTICLE] Sem usuário logado, não foi possível sincronizar autor');
         }
 
         // Parse dates
         const articleData: NewArticle = {
           ...data,
           id: generateId(),
-          authorId: authorId || null,
+          authorId: authorId || undefined,
           editorId: user?.id?.toString() || null,
           publishedAt: data.publishedAt ? new Date(data.publishedAt) : null,
           scheduledFor: data.scheduledFor ? new Date(data.scheduledFor) : null,
@@ -304,16 +386,23 @@ export class ArticleController {
         const data = c.req.valid('json');
         const user = c.get('user');
 
-        // Ensure author exists for the current user if no authorId provided
-        let authorId = data.authorId;
-        if (!authorId && user?.id) {
-          authorId = await this.authorSyncService.getAuthorIdForUser(user.id.toString());
+        console.log('🔍 [UPDATE ARTICLE] === PAYLOAD COMPLETO DO FRONTEND ===');
+        console.log('🔍 [UPDATE ARTICLE] Data recebido:', JSON.stringify(data, null, 2));
+        console.log('🔍 [UPDATE ARTICLE] User context:', JSON.stringify(user, null, 2));
+
+        // SEMPRE sincronizar o autor com base no usuário logado
+        // Ignorar authorId vindo do frontend (pode ser o ID do D1 ao invés do Neon)
+        let authorId = null;
+        if (user?.id) {
+          console.log('🔄 [UPDATE ARTICLE] Sincronizando autor...');
+          authorId = await this.authorSyncService.ensureAuthorForUser(user.id.toString(), user);
+          console.log('✅ [UPDATE ARTICLE] Autor sincronizado:', { authorId });
         }
 
         // Parse dates if provided
         const updateData: Partial<NewArticle> = {
           ...data,
-          authorId: authorId || data.authorId, // Use the ensured author ID
+          authorId: authorId || undefined, // Use APENAS o author ID do Neon (nunca do frontend)
           editorId: user?.id?.toString() || null, // Track who edited
         };
 
@@ -408,6 +497,18 @@ export class ArticleController {
           filters,
           includeRelations: params.includeRelations,
         });
+
+        console.log('📋 [LIST ARTICLES] === RESULTADO DA LISTAGEM ===');
+        console.log('📋 [LIST ARTICLES] Total de artigos:', result.pagination.total);
+        console.log('📋 [LIST ARTICLES] Artigos retornados:', result.data.length);
+        if (result.data.length > 0) {
+          console.log('📋 [LIST ARTICLES] Primeiro artigo:', {
+            id: result.data[0].id || result.data[0].article?.id,
+            title: result.data[0].title || result.data[0].article?.title,
+            authorId: result.data[0].authorId || result.data[0].article?.authorId,
+            author: result.data[0].author || result.data[0].article?.author
+          });
+        }
 
         return c.json({
           success: true,

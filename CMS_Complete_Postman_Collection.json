@@ -1,9 +1,9 @@
 {
   "info": {
     "name": "CMS Notícias - API Completa",
-    "description": "Collection completa com todas as APIs do sistema CMS de Notícias - Incluindo Analytics Dashboard, Authors Management, Tags, Public Portal APIs, Engagement Tracking e Database Management",
+    "description": "Collection completa com todas as APIs do sistema CMS de Notícias - Incluindo Analytics Dashboard, Authors Management, Tags, Public Portal APIs, Engagement Tracking, Two-Factor Authentication, Invitations Management, SEO AI Assistant, Audit & Security e Database Management. Atualizada com correções de rotas de busca e remoção da seção Featured Content (agora use /articles?isFeatured=true)",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "version": "2.0.0"
+    "version": "3.1.0"
   },
   "auth": {
     "type": "bearer",
@@ -19,6 +19,21 @@
     {
       "key": "base_url",
       "value": "http://localhost:8787",
+      "type": "string"
+    },
+    {
+      "key": "invite_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "invitation_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "event_id",
+      "value": "",
       "type": "string"
     }
   ],
@@ -498,13 +513,31 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{base_url}}/api/cms/articles/search?q=tecnologia&page=1&limit=20",
+              "raw": "{{base_url}}/api/cms/articles?search=tecnologia&page=1&limit=20",
               "host": ["{{base_url}}"],
-              "path": ["api", "cms", "articles", "search"],
+              "path": ["api", "cms", "articles"],
               "query": [
-                {"key": "q", "value": "tecnologia"},
+                {"key": "search", "value": "tecnologia"},
                 {"key": "page", "value": "1"},
                 {"key": "limit", "value": "20"}
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Featured Articles",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/articles?isFeatured=true&page=1&limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "articles"],
+              "query": [
+                {"key": "isFeatured", "value": "true"},
+                {"key": "page", "value": "1"},
+                {"key": "limit", "value": "10"}
               ]
             }
           },
@@ -1642,99 +1675,6 @@
       ]
     },
     {
-      "name": "⭐ Featured Content",
-      "item": [
-        {
-          "name": "List Featured Content",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{base_url}}/api/cms/featured?position=homepage_main&active=true",
-              "host": ["{{base_url}}"],
-              "path": ["api", "cms", "featured"],
-              "query": [
-                {"key": "position", "value": "homepage_main"},
-                {"key": "active", "value": "true"}
-              ]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Create Featured Content",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "if (pm.response.code === 201) {",
-                  "    const response = pm.response.json();",
-                  "    if (response.data && response.data.id) {",
-                  "        pm.environment.set('featured_id', response.data.id);",
-                  "        console.log('Featured ID saved:', response.data.id);",
-                  "    }",
-                  "}"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"articleId\": \"{{article_id}}\",\n  \"featuredType\": \"hero_main\",\n  \"position\": \"homepage_main\",\n  \"priority\": 1,\n  \"startDate\": \"2024-09-12T00:00:00Z\",\n  \"endDate\": \"2024-09-19T23:59:59Z\",\n  \"customTitle\": \"Destaque Principal\",\n  \"customDescription\": \"Este é um artigo em destaque na página principal\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": {
-              "raw": "{{base_url}}/api/cms/featured",
-              "host": ["{{base_url}}"],
-              "path": ["api", "cms", "featured"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Update Featured Content",
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"priority\": 2,\n  \"endDate\": \"2024-09-25T23:59:59Z\",\n  \"customDescription\": \"Descrição atualizada do destaque\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": {
-              "raw": "{{base_url}}/api/cms/featured/{{featured_id}}",
-              "host": ["{{base_url}}"],
-              "path": ["api", "cms", "featured", "{{featured_id}}"]
-            }
-          },
-          "response": []
-        }
-      ]
-    },
-    {
       "name": "👥 Authors Management",
       "item": [
         {
@@ -2394,6 +2334,718 @@
               "raw": "{{base_url}}/api/public/rss/category/tecnologia",
               "host": ["{{base_url}}"],
               "path": ["api", "public", "rss", "category", "tecnologia"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🔐 Two-Factor Authentication (2FA)",
+      "item": [
+        {
+          "name": "Get 2FA Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/2fa/status",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "2fa", "status"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Setup 2FA",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"appName\": \"TheNews CMS\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/cms/2fa/setup",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "2fa", "setup"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Enable 2FA",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"verificationCode\": \"123456\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/cms/2fa/enable",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "2fa", "enable"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Verify 2FA Code",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"123456\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/cms/2fa/verify",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "2fa", "verify"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Disable 2FA",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"verificationCode\": \"123456\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/cms/2fa/disable",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "2fa", "disable"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Regenerate Backup Codes",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"verificationCode\": \"123456\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/cms/2fa/regenerate-backup-codes",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "2fa", "regenerate-backup-codes"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Reset 2FA (Admin Only)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{user_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/cms/2fa/reset",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "2fa", "reset"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Time Info",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/2fa/time-info",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "2fa", "time-info"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Validate Code Format",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"123456\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/cms/2fa/validate-code-format",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "2fa", "validate-code-format"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "2FA Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/2fa/health",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "2fa", "health"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "📧 Invitations Management",
+      "item": [
+        {
+          "name": "List Invitations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/invitations/list?page=1&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "invitations", "list"],
+              "query": [
+                {"key": "page", "value": "1"},
+                {"key": "limit", "value": "20"}
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Invite User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.data && response.data.invitation && response.data.invitation.id) {",
+                  "        pm.environment.set('invitation_id', response.data.invitation.id);",
+                  "        console.log('Invitation ID saved:', response.data.invitation.id);",
+                  "    }",
+                  "    if (response.data && response.data.inviteUrl) {",
+                  "        const urlParts = response.data.inviteUrl.split('/');",
+                  "        const token = urlParts[urlParts.length - 1];",
+                  "        pm.environment.set('invite_token', token);",
+                  "        console.log('Invite token saved:', token);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"novo@exemplo.com\",\n  \"role\": \"editor\",\n  \"permissions\": [\"articles:create\", \"articles:edit\"],\n  \"brandId\": \"brand-123\",\n  \"brandName\": \"Marca Exemplo\",\n  \"message\": \"Bem-vindo à nossa equipe editorial!\",\n  \"expiresInDays\": 7\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/cms/invitations/invite",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "invitations", "invite"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Invitation Details (Public)",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/invitations/details/{{invite_token}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "invitations", "details", "{{invite_token}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Accept Invitation (Public)",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"inviteToken\": \"{{invite_token}}\",\n  \"firstName\": \"João\",\n  \"lastName\": \"Silva\",\n  \"password\": \"senha123456\",\n  \"confirmPassword\": \"senha123456\",\n  \"timezone\": \"America/Sao_Paulo\",\n  \"language\": \"pt-BR\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/cms/invitations/accept",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "invitations", "accept"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Revoke Invitation",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/invitations/revoke/{{invitation_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "invitations", "revoke", "{{invitation_id}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Onboarding Progress",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/invitations/onboarding/progress",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "invitations", "onboarding", "progress"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Complete Onboarding Step",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"stepId\": \"profile-setup\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/cms/invitations/onboarding/complete-step",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "invitations", "onboarding", "complete-step"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Complete Onboarding",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/invitations/onboarding/complete",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "invitations", "onboarding", "complete"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Cleanup Expired Invitations",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/invitations/cleanup-expired",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "invitations", "cleanup-expired"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Resend Invitation",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/invitations/resend/{{invitation_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "invitations", "resend", "{{invitation_id}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Invitations Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/invitations/health",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "invitations", "health"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🤖 SEO AI Assistant",
+      "item": [
+        {
+          "name": "Generate SEO Content",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Como Aprender JavaScript em 2024\",\n  \"content\": \"JavaScript é uma das linguagens de programação mais populares do mundo...\",\n  \"excerpt\": \"Guia completo para aprender JavaScript do zero\",\n  \"category\": \"tecnologia\",\n  \"tags\": [\"javascript\", \"programação\", \"web development\"],\n  \"targetAudience\": \"iniciantes em programação\",\n  \"language\": \"pt-BR\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/cms/seo/generate",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "seo", "generate"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🔍 Audit & Security",
+      "item": [
+        {
+          "name": "List Audit Logs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/audit/logs?page=1&limit=50",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "audit", "logs"],
+              "query": [
+                {"key": "page", "value": "1"},
+                {"key": "limit", "value": "50"}
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Security Events",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/audit/security-events?page=1&limit=50",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "audit", "security-events"],
+              "query": [
+                {"key": "page", "value": "1"},
+                {"key": "limit", "value": "50"}
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Resolve Security Event",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"resolution\": \"Evento investigado e resolvido. Usuário foi notificado sobre tentativa de acesso suspeita.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/cms/audit/security-events/{{event_id}}/resolve",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "audit", "security-events", "{{event_id}}", "resolve"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Log Security Event",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const response = pm.response.json();",
+                  "    if (response.data && response.data.eventId) {",
+                  "        pm.environment.set('event_id', response.data.eventId);",
+                  "        console.log('Event ID saved:', response.data.eventId);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"eventType\": \"failed_login_attempt\",\n  \"severity\": \"medium\",\n  \"category\": \"authentication\",\n  \"description\": \"Múltiplas tentativas de login falhadas detectadas\",\n  \"userId\": \"{{user_id}}\",\n  \"userEmail\": \"user@exemplo.com\",\n  \"additionalData\": {\n    \"attempts\": 5,\n    \"ipAddress\": \"192.168.1.100\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/cms/audit/security-events",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "audit", "security-events"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Audit Stats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/audit/stats?days=30",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "audit", "stats"],
+              "query": [
+                {"key": "days", "value": "30"}
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Security Stats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/audit/security-stats",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "audit", "security-stats"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Detect Suspicious Activity",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/audit/suspicious-activity",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "audit", "suspicious-activity"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Cleanup Old Logs",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"auditLogsDays\": 90,\n  \"securityEventsDays\": 365\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/cms/audit/cleanup",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "audit", "cleanup"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Export Audit Logs (JSON)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/audit/export/logs?format=json",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "audit", "export", "logs"],
+              "query": [
+                {"key": "format", "value": "json"}
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Export Audit Logs (CSV)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/audit/export/logs?format=csv",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "audit", "export", "logs"],
+              "query": [
+                {"key": "format", "value": "csv"}
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Audit Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/cms/audit/health",
+              "host": ["{{base_url}}"],
+              "path": ["api", "cms", "audit", "health"]
             }
           },
           "response": []

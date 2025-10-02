@@ -18,7 +18,7 @@ const updateTagSchema = createTagSchema.partial();
 
 const searchTagsSchema = z.object({
   q: z.string().min(2, 'Query must be at least 2 characters'),
-  limit: z.string().transform(val => Math.min(50, parseInt(val) || 10)).default('10'),
+  limit: z.string().transform(val => Math.min(50, parseInt(val) || 10)).default(10),
 });
 
 const suggestTagsSchema = z.object({
@@ -123,19 +123,42 @@ export class TagController {
       }
     });
 
-    // Get all tags
+    // Get all tags with pagination
     this.app.get('/', async (c) => {
       try {
-        console.log('📋 Getting all tags');
+        const page = parseInt(c.req.query('page') || '1');
+        const limit = Math.min(50, parseInt(c.req.query('limit') || '10'));
+        const sortBy = c.req.query('sortBy') as 'name' | 'useCount' | 'createdAt' || 'name';
+        const sortOrder = c.req.query('sortOrder') as 'asc' | 'desc' || 'asc';
+        const search = c.req.query('search');
+        const isActive = c.req.query('isActive');
 
-        const tags = await this.tagService.getAllTags();
+
+        const filters = {
+          search,
+          isActive: isActive ? isActive === 'true' : undefined,
+        };
+
+        // Usar o TagRepository diretamente para obter dados com paginação
+        const { TagRepository } = await import('../../repositories/TagRepository');
+        const tagRepository = new TagRepository(this.tagService['db']);
+        
+        const result = await tagRepository.list({
+          page,
+          limit,
+          sortBy,
+          sortOrder,
+          filters,
+        });
+
 
         return c.json({
           success: true,
-          data: tags,
+          data: result.data,
+          pagination: result.pagination,
         });
       } catch (error) {
-        console.error('Error getting all tags:', error);
+        console.error('Error getting tags:', error);
         return c.json({
           success: false,
           error: 'Failed to get tags',
@@ -147,6 +170,13 @@ export class TagController {
     this.app.get('/:id', async (c) => {
       try {
         const id = c.req.param('id');
+
+        if (!id) {
+          return c.json({
+            success: false,
+            error: 'Tag ID is required',
+          }, 400);
+        }
 
         console.log(`🔍 Getting tag: ${id}`);
 

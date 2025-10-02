@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import { noCacheMiddleware } from '../middlewares/noCacheMiddleware';
 import { ultraCacheMiddleware } from '../middlewares/ultraCacheMiddleware';
 import { healthRoutes } from './routes/health';
 import { authRoutes } from './routes/auth';
@@ -39,6 +40,7 @@ export function createApp(env: Env): AppType {
   // Middlewares globais
   app.use('*', cors());
   app.use('*', errorHandler); // Add error handler early
+  app.use('*', noCacheMiddleware); // ANTI-CACHE para rotas administrativas (DEVE VIR ANTES do cache)
   app.use('*', ultraCacheMiddleware);
   
   // Apply rate limiting to public API

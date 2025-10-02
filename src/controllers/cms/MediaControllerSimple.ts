@@ -256,8 +256,7 @@ export class MediaControllerSimple {
               or(
                 sql`LOWER(${mediaFiles.fileName}) LIKE ${searchQuery}`,
                 sql`LOWER(${mediaFiles.originalFileName}) LIKE ${searchQuery}`,
-                sql`LOWER(${mediaFiles.description}) LIKE ${searchQuery}`,
-                sql`LOWER(${mediaFiles.alt}) LIKE ${searchQuery}`
+                sql`LOWER(${mediaFiles.description}) LIKE ${searchQuery}`
               )
             )
           );

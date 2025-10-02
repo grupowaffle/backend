@@ -3,21 +3,22 @@ import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { getDrizzleClient } from '../../config/db';
 import { ArticleRepository, CategoryRepository, AuthorRepository, TagRepository } from '../../repositories';
-import { users, authors } from '../../config/db/schema';
+import { authors } from '../../config/db/schema';
 import { EngagementTrackingService } from '../../services/EngagementTrackingService';
 import { Env } from '../../config/types/common';
 import { eq, desc, and } from 'drizzle-orm';
 
 // Validation schemas for public API
 const listArticlesSchema = z.object({
-  page: z.string().transform(val => parseInt(val) || 1).default('1'),
-  limit: z.string().transform(val => Math.min(50, parseInt(val) || 20)).default('20'),
+  page: z.string().transform(val => parseInt(val) || 1).default(1),
+  limit: z.string().transform(val => Math.min(50, parseInt(val) || 20)).default(20),
   category: z.string().optional(),
   author: z.string().optional(),
   tags: z.string().optional(), // Comma-separated tags
   date: z.string().optional(), // YYYY-MM-DD format
   featured: z.string().transform(val => val === 'true').optional(),
   source: z.enum(['manual', 'beehiiv']).optional(),
+  newsletter: z.string().optional(), // Filtro por caderno/newsletter
   sort: z.enum(['publishedAt', 'views', 'likes', 'shares', 'title']).default('publishedAt'),
   order: z.enum(['asc', 'desc']).default('desc'),
   search: z.string().optional(),
@@ -36,8 +37,8 @@ const tagSchema = z.object({
 });
 
 const listAuthorsSchema = z.object({
-  page: z.string().transform(val => parseInt(val) || 1).default('1'),
-  limit: z.string().transform(val => Math.min(50, parseInt(val) || 20)).default('20'),
+  page: z.string().transform(val => parseInt(val) || 1).default(1),
+  limit: z.string().transform(val => Math.min(50, parseInt(val) || 20)).default(20),
   search: z.string().optional(),
   featured: z.string().transform(val => val === 'true').optional(),
   sort: z.enum(['name', 'articleCount', 'createdAt']).default('name'),
@@ -45,8 +46,8 @@ const listAuthorsSchema = z.object({
 });
 
 const listTagsSchema = z.object({
-  page: z.string().transform(val => parseInt(val) || 1).default('1'),
-  limit: z.string().transform(val => Math.min(50, parseInt(val) || 20)).default('20'),
+  page: z.string().transform(val => parseInt(val) || 1).default(1),
+  limit: z.string().transform(val => Math.min(50, parseInt(val) || 20)).default(20),
   search: z.string().optional(),
   sort: z.enum(['name', 'useCount', 'createdAt']).default('name'),
   order: z.enum(['asc', 'desc']).default('asc'),
@@ -91,10 +92,10 @@ export class PublicAPIController {
     // Get latest articles (homepage)
     this.app.get('/articles', zValidator('query', listArticlesSchema), async (c) => {
       try {
-        const { page, limit, category, author, tags, date, featured, source, sort, order, search } = c.req.valid('query');
+        const { page, limit, category, author, tags, date, featured, source, newsletter, sort, order, search } = c.req.valid('query');
 
         console.log('📰 Public API: Fetching articles with filters:', { 
-          page, limit, category, author, tags, date, featured, source, sort, order, search 
+          page, limit, category, author, tags, date, featured, source, newsletter, sort, order, search 
         });
 
         // Build filters for published articles only
@@ -103,7 +104,14 @@ export class PublicAPIController {
         };
 
         if (category) {
-          filters.categoryId = category;
+          // First, try to find category by slug to get the ID
+          const categoryData = await this.categoryRepository.findBySlug(category);
+          if (categoryData) {
+            filters.categoryId = categoryData.id;
+          } else {
+            // If not found by slug, assume it's already an ID
+            filters.categoryId = category;
+          }
         }
 
         if (author) {
@@ -137,6 +145,10 @@ export class PublicAPIController {
 
         if (source) {
           filters.source = source;
+        }
+
+        if (newsletter) {
+          filters.newsletter = newsletter;
         }
 
         const options = {
@@ -178,6 +190,7 @@ export class PublicAPIController {
             shares: article.shares || 0,
             isFeatured: article.isFeatured,
             source: article.source,
+            newsletter: article.newsletter, // Campo caderno/newsletter
             
             // URLs completas para navegação
             url: `/artigo/${article.slug}`,
@@ -296,6 +309,7 @@ export class PublicAPIController {
             readTime: article.readTime,
             views: article.views || 0,
             source: article.source,
+            newsletter: article.newsletter, // Campo caderno/newsletter
             
             // URLs completas
             url: `/artigo/${article.slug}`,
@@ -410,6 +424,7 @@ export class PublicAPIController {
           shares: article.shares || 0,
           isFeatured: article.isFeatured,
           source: article.source,
+          newsletter: article.newsletter, // Campo caderno/newsletter
           beehiivUrl: article.beehiivUrl,
           
           // URLs completas para navegação
@@ -532,6 +547,7 @@ export class PublicAPIController {
           readTime: relatedArticle.readTime,
           views: relatedArticle.views,
           source: relatedArticle.source,
+          newsletter: relatedArticle.newsletter, // Campo caderno/newsletter
         }));
 
         return c.json({
@@ -598,6 +614,7 @@ export class PublicAPIController {
           readTime: article.readTime,
           views: article.views,
           source: article.source,
+          newsletter: article.newsletter, // Campo caderno/newsletter
         }));
 
         return c.json({
@@ -658,8 +675,8 @@ export class PublicAPIController {
     // Usage: GET /api/public/search?q=search_term&page=1&limit=20
     this.app.get('/search', zValidator('query', z.object({
       q: z.string().optional(), // Search query (optional - returns empty results if not provided)
-      page: z.string().transform(val => parseInt(val) || 1).default('1'),
-      limit: z.string().transform(val => Math.min(50, parseInt(val) || 20)).default('20'),
+  page: z.string().transform(val => parseInt(val) || 1).default(1),
+  limit: z.string().transform(val => Math.min(50, parseInt(val) || 20)).default(20),
     })), async (c) => {
       try {
         const { q: query, page, limit } = c.req.valid('query');
@@ -709,6 +726,7 @@ export class PublicAPIController {
           publishedAt: article.publishedAt,
           readTime: article.readTime,
           source: article.source,
+          newsletter: article.newsletter, // Campo caderno/newsletter
         }));
 
         return c.json({
@@ -1025,6 +1043,49 @@ export class PublicAPIController {
       }
     });
 
+    // Debug endpoint para verificar autores
+    this.app.get('/debug/authors', async (c) => {
+      try {
+        const { getDrizzleClient } = await import('../../config/db');
+        const db = getDrizzleClient(c.env);
+        const { authors, articles } = await import('../../config/db/schema');
+        const { eq } = await import('drizzle-orm');
+        
+        // Buscar todos os autores
+        const allAuthors = await db
+          .select()
+          .from(authors)
+          .limit(10);
+
+        // Buscar artigos com autores
+        const articlesWithAuthors = await db
+          .select({
+            articleId: articles.id,
+            articleTitle: articles.title,
+            authorId: articles.authorId,
+            authorName: authors.name,
+          })
+          .from(articles)
+          .leftJoin(authors, eq(articles.authorId, authors.id))
+          .limit(10);
+
+        return c.json({
+          success: true,
+          data: {
+            allAuthors,
+            articlesWithAuthors,
+          },
+        });
+      } catch (error) {
+        return c.json({
+          success: false,
+          error: error instanceof Error ? error.message : 'Failed to fetch debug info',
+        }, 500);
+      }
+    });
+
+    // Debug endpoint removed - using D1 for user management
+
     // Get single author by slug
     this.app.get('/authors/:slug', zValidator('param', authorSchema), async (c) => {
       try {
@@ -1064,6 +1125,8 @@ export class PublicAPIController {
 
         // Find author by slug
         const author = await this.authorRepository.findBySlug(slug);
+        console.log('🔍 Author found:', author ? { id: author.id, name: author.name, slug: author.slug, isActive: author.isActive } : 'null');
+        
         if (!author || !author.isActive) {
           return c.json({
             success: false,
@@ -1134,6 +1197,7 @@ export class PublicAPIController {
           readTime: article.readTime,
           views: article.views,
           source: article.source,
+          newsletter: article.newsletter, // Campo caderno/newsletter
         }));
 
         return c.json({
@@ -1314,6 +1378,7 @@ export class PublicAPIController {
           readTime: article.readTime,
           views: article.views,
           source: article.source,
+          newsletter: article.newsletter, // Campo caderno/newsletter
         }));
 
         return c.json({
@@ -1392,6 +1457,7 @@ export class PublicAPIController {
       <pubDate>${pubDate}</pubDate>
       ${article.featuredImage ? `<enclosure url="${article.featuredImage}" type="image/jpeg" />` : ''}
       <category>${article.categoryId || 'Geral'}</category>
+      ${article.newsletter ? `<category>${article.newsletter}</category>` : ''}
       ${article.tags ? article.tags.map((tag: string) => `<category>${tag}</category>`).join('') : ''}
     </item>`;
         }).join('');
@@ -1460,6 +1526,7 @@ export class PublicAPIController {
       <pubDate>${pubDate}</pubDate>
       ${article.featuredImage ? `<enclosure url="${article.featuredImage}" type="image/jpeg" />` : ''}
       <category>${category.name}</category>
+      ${article.newsletter ? `<category>${article.newsletter}</category>` : ''}
       ${article.tags ? article.tags.map((tag: string) => `<category>${tag}</category>`).join('') : ''}
     </item>`;
         }).join('');
@@ -1493,11 +1560,28 @@ export class PublicAPIController {
   /**
    * Calculate word count from HTML content
    */
-  private calculateWordCount(content: string): number {
+  private calculateWordCount(content: any): number {
     if (!content) return 0;
     
+    // Handle both string and array content
+    let contentString = '';
+    if (typeof content === 'string') {
+      contentString = content;
+    } else if (Array.isArray(content)) {
+      // If content is an array, join all text content
+      contentString = content.map(item => {
+        if (typeof item === 'string') return item;
+        if (typeof item === 'object' && item.text) return item.text;
+        return '';
+      }).join(' ');
+    } else if (typeof content === 'object' && content.text) {
+      contentString = content.text;
+    } else {
+      return 0;
+    }
+    
     // Remove HTML tags and get plain text
-    const plainText = content.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+    const plainText = contentString.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
     
     // Count words (split by spaces and filter empty strings)
     const words = plainText.split(' ').filter(word => word.length > 0);
@@ -1507,7 +1591,7 @@ export class PublicAPIController {
   /**
    * Calculate reading time in minutes
    */
-  private calculateReadingTime(content: string): string {
+  private calculateReadingTime(content: any): string {
     const wordCount = this.calculateWordCount(content);
     const wordsPerMinute = 200; // Average reading speed
     const minutes = Math.ceil(wordCount / wordsPerMinute);
@@ -1535,12 +1619,29 @@ export class PublicAPIController {
   /**
    * Extract featured image from article content
    */
-  private extractFeaturedImageFromContent(content: string, articleTitle: string): any {
-    if (!content || typeof content !== 'string') return null;
+  private extractFeaturedImageFromContent(content: any, articleTitle: string): any {
+    if (!content) return null;
+
+    // Handle both string and array content
+    let contentString = '';
+    if (typeof content === 'string') {
+      contentString = content;
+    } else if (Array.isArray(content)) {
+      // If content is an array, join all text content
+      contentString = content.map(item => {
+        if (typeof item === 'string') return item;
+        if (typeof item === 'object' && item.text) return item.text;
+        return '';
+      }).join(' ');
+    } else if (typeof content === 'object' && content.text) {
+      contentString = content.text;
+    } else {
+      return null;
+    }
 
     // Regex para encontrar tags <img> no conteúdo
     const imgRegex = /<img[^>]+src=["']([^"']+)["'][^>]*>/i;
-    const match = content.match(imgRegex);
+    const match = contentString.match(imgRegex);
 
     if (match && match[1]) {
       const imageUrl = match[1];
@@ -1587,27 +1688,7 @@ export class PublicAPIController {
         };
       }
 
-      // Fallback: try to get from users table if authorId is actually a user ID
-      if (!isNaN(Number(authorId))) {
-        const user = await db
-          .select()
-          .from(users)
-          .where(eq(users.id, parseInt(authorId)))
-          .limit(1);
-
-        if (user[0]) {
-          const userData = user[0];
-          return {
-            id: userData.id.toString(),
-            name: userData.name || 'Autor',
-            email: userData.email,
-            avatar: userData.avatar,
-            bio: userData.bio,
-            slug: userData.email?.split('@')[0] || userData.id.toString(),
-          };
-        }
-      }
-
+      // Fallback: return null since users table is in D1
       return null;
     } catch (error) {
       console.error('Error fetching author:', error);

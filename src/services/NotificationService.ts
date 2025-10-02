@@ -6,7 +6,7 @@
 import { DatabaseType } from '../repositories/BaseRepository';
 import { generateId } from '../lib/cuid';
 import { eq, and, desc, count, sql, inArray } from 'drizzle-orm';
-import { notifications, users } from '../config/db/schema';
+import { notifications } from '../config/db/schema';
 
 export type NotificationType = 
   | 'article_status_changed'    // Mudança de status de artigo

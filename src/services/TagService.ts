@@ -16,6 +16,7 @@ export interface TagData {
   color?: string;
   useCount: number;
   isActive: boolean;
+  articleCount?: number; // Contagem de artigos associados a esta tag
 }
 
 export interface TagSuggestion {
@@ -122,15 +123,129 @@ export class TagService {
    */
   async getAllTags(): Promise<TagData[]> {
     try {
-      const results = await this.db
+      // Get all tags first
+      const allTags = await this.db
         .select()
         .from(tags)
         .orderBy(asc(tags.name));
 
-      return results;
+      // For each tag, count articles
+      const tagsWithCount = await Promise.all(
+        allTags.map(async (tag) => {
+          const [countResult] = await this.db
+            .select({
+              count: sql<number>`COUNT(*)::int`,
+            })
+            .from(articleTags)
+            .where(eq(articleTags.tagId, tag.id));
+
+          return {
+            ...tag,
+            articleCount: Number(countResult?.count || 0),
+          };
+        })
+      );
+
+      return tagsWithCount;
     } catch (error) {
       console.error('Error getting all tags:', error);
       return [];
+    }
+  }
+
+  /**
+   * Get tags with pagination and filters
+   */
+  async getTagsWithPagination(options: {
+    page: number;
+    limit: number;
+    sortBy?: 'name' | 'useCount' | 'createdAt';
+    sortOrder?: 'asc' | 'desc';
+    filters?: {
+      search?: string;
+      isActive?: boolean;
+    };
+  }): Promise<{ data: TagData[]; pagination: any }> {
+    try {
+      const { page, limit, sortBy = 'name', sortOrder = 'asc', filters = {} } = options;
+      const offset = (page - 1) * limit;
+
+      // Build where conditions
+      const whereConditions = [];
+      
+      if (filters.isActive !== undefined) {
+        whereConditions.push(eq(tags.isActive, filters.isActive));
+      }
+      
+      if (filters.search) {
+        whereConditions.push(ilike(tags.name, `%${filters.search}%`));
+      }
+
+      const whereClause = whereConditions.length > 0 ? and(...whereConditions) : undefined;
+
+      // Get total count
+      const totalResult = await this.db
+        .select({
+          count: sql<number>`COUNT(*)::int`,
+        })
+        .from(tags)
+        .where(whereClause);
+
+      const total = totalResult[0]?.count || 0;
+
+      // Build order by
+      let orderBy;
+      switch (sortBy) {
+        case 'useCount':
+          orderBy = sortOrder === 'desc' ? desc(tags.useCount) : asc(tags.useCount);
+          break;
+        case 'createdAt':
+          orderBy = sortOrder === 'desc' ? desc(tags.createdAt) : asc(tags.createdAt);
+          break;
+        default:
+          orderBy = sortOrder === 'desc' ? desc(tags.name) : asc(tags.name);
+      }
+
+      // Get tags
+      const tagsData = await this.db
+        .select()
+        .from(tags)
+        .where(whereClause)
+        .orderBy(orderBy)
+        .limit(limit)
+        .offset(offset);
+
+      // For each tag, count articles
+      const data = await Promise.all(
+        tagsData.map(async (tag) => {
+          const [countResult] = await this.db
+            .select({
+              count: sql<number>`COUNT(*)::int`,
+            })
+            .from(articleTags)
+            .where(eq(articleTags.tagId, tag.id));
+
+          return {
+            ...tag,
+            articleCount: Number(countResult?.count || 0),
+          };
+        })
+      );
+
+      return {
+        data,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+          hasNext: page < Math.ceil(total / limit),
+          hasPrev: page > 1,
+        },
+      };
+    } catch (error) {
+      console.error('Error getting tags with pagination:', error);
+      throw error;
     }
   }
 

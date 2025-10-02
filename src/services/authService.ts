@@ -1,7 +1,7 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { eq } from 'drizzle-orm';
-import { users } from '../config/db/schema';
+// Users table removed - using D1 for user management
 import { getDb } from '../config/db/connection';
 import { generateId } from '../lib/cuid';
 import { CloudflareD1Client } from '../config/types/auth';

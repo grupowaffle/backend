@@ -167,11 +167,9 @@ export class DashboardController {
         // Getting recent activity
 
         // Admins/editores-chefe/developers veem toda atividade
-        console.log('👤 User role:', user.role);
 
         if (['admin', 'editor-chefe', 'developer', 'super_admin'].includes(user.role)) {
           const overview = await this.dashboardService.getDashboardOverview();
-          console.log('📊 Overview recentActivity:', overview.recentActivity.length);
 
           return c.json({
             success: true,

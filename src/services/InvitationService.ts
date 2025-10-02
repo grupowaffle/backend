@@ -8,7 +8,7 @@ import { generateId } from '../lib/cuid';
 import crypto from 'crypto';
 import { eq, and, desc, count, gte, lte } from 'drizzle-orm';
 import { 
-  userInvitations, users, UserInvitation, NewUserInvitation, NewUser 
+  userInvitations, UserInvitation, NewUserInvitation 
 } from '../config/db/schema';
 import bcrypt from 'bcryptjs';
 

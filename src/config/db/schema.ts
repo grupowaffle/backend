@@ -1,59 +1,7 @@
 import { pgTable, text, timestamp, integer, boolean, primaryKey, unique, json, serial, index } from 'drizzle-orm/pg-core';
 import { generateId } from '../../lib/cuid';
 
-// Users table (using pgTable for public schema by default)
-export const users = pgTable('users', {
-  id: integer('id').primaryKey(),
-  email: text('email').notNull().unique(),
-  name: text('name'),
-  
-  // Authentication & Security
-  passwordHash: text('passwordHash'), // bcrypt hash
-  isActive: boolean('isActive').notNull().default(true),
-  emailVerified: boolean('emailVerified').notNull().default(false),
-  emailVerifiedAt: timestamp('emailVerifiedAt', { withTimezone: true }),
-  
-  // Multi-Factor Authentication
-  twoFactorEnabled: boolean('twoFactorEnabled').notNull().default(false),
-  twoFactorSecret: text('twoFactorSecret'), // TOTP secret
-  backupCodes: json('backupCodes'), // Array of backup codes
-  
-  // Role & Permissions
-  role: text('role').notNull().default('editor'), // 'admin', 'editor-chefe', 'editor', 'revisor', 'user'
-  permissions: json('permissions'), // Array of specific permissions
-  brandId: text('brandId'),
-  brandName: text('brandName'),
-  
-  // Profile Information
-  firstName: text('firstName'),
-  lastName: text('lastName'),
-  bio: text('bio'),
-  avatar: text('avatar'), // URL to profile image
-  phone: text('phone'),
-  timezone: text('timezone').default('America/Sao_Paulo'),
-  language: text('language').default('pt-BR'),
-  
-  // Access Control
-  lastLoginAt: timestamp('lastLoginAt', { withTimezone: true }),
-  lastLoginIp: text('lastLoginIp'),
-  loginCount: integer('loginCount').default(0),
-  failedLoginAttempts: integer('failedLoginAttempts').default(0),
-  lockedUntil: timestamp('lockedUntil', { withTimezone: true }),
-  
-  // Invitation & Onboarding
-  invitedBy: text('invitedBy').references(() => users.id),
-  invitedAt: timestamp('invitedAt', { withTimezone: true }),
-  onboardingCompleted: boolean('onboardingCompleted').notNull().default(false),
-  onboardingCompletedAt: timestamp('onboardingCompletedAt', { withTimezone: true }),
-  
-  // Metadata
-  metadata: json('metadata'), // Additional custom data
-  
-  createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
-}, (table) => ({
-  uniqueEmail: unique('users_unique_email').on(table.email),
-}));
+// Users table removed - using D1 (Cloudflare) for user management
 
 // Subscribers table
 export const subscribers = pgTable('subscribers', {
@@ -103,8 +51,7 @@ export const urlTracking = pgTable('url_tracking', {
 });
 
 // Export types
-export type User = typeof users.$inferSelect;
-export type NewUser = typeof users.$inferInsert;
+// User types removed - using D1 for user management
 
 export type Subscriber = typeof subscribers.$inferSelect;
 export type NewSubscriber = typeof subscribers.$inferInsert;
@@ -196,7 +143,7 @@ export const media = pgTable('media', {
   optimizationStatus: text('optimizationStatus').default('pending'),
   
   // Control
-  uploadedBy: text('uploadedBy').references(() => users.id),
+  uploadedBy: text('uploadedBy'), // References D1 users
   isActive: boolean('isActive').default(true),
   
   createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
@@ -236,7 +183,7 @@ export const articles = pgTable('articles', {
   featuredPosition: integer('featuredPosition'),
   featuredUntil: timestamp('featuredUntil', { withTimezone: true }),
   featuredCategory: text('featuredCategory'),
-  featuredBy: text('featuredBy').references(() => users.id),
+  featuredBy: text('featuredBy'), // References D1 users
   featuredAt: timestamp('featuredAt', { withTimezone: true }),
   
   // Images
@@ -246,7 +193,7 @@ export const articles = pgTable('articles', {
   
   // Authorship
   authorId: text('authorId').references(() => authors.id),
-  editorId: text('editorId').references(() => users.id),
+  editorId: text('editorId'), // References D1 users
   
   // Analytics
   views: integer('views').default(0),
@@ -310,9 +257,9 @@ export const editorialWorkflow = pgTable('editorial_workflow', {
   previousStatus: text('previousStatus'),
   
   // People involved
-  assignedEditor: text('assignedEditor').references(() => users.id),
-  reviewedBy: text('reviewedBy').references(() => users.id),
-  approvedBy: text('approvedBy').references(() => users.id),
+  assignedEditor: text('assignedEditor'), // References D1 users
+  reviewedBy: text('reviewedBy'), // References D1 users
+  approvedBy: text('approvedBy'), // References D1 users
   
   // Timestamps
   importedAt: timestamp('importedAt', { withTimezone: true }),
@@ -358,8 +305,8 @@ export const featuredContent = pgTable('featured_content', {
   metadata: json('metadata'), // Additional custom data
   
   // Editorial control
-  createdBy: text('createdBy').references(() => users.id).notNull(),
-  updatedBy: text('updatedBy').references(() => users.id).notNull(),
+  createdBy: text('createdBy').notNull(), // References D1 users
+  updatedBy: text('updatedBy').notNull(), // References D1 users
   
   isActive: boolean('isActive').default(true),
   
@@ -422,7 +369,7 @@ export const beehiivSyncLogs = pgTable('beehiiv_sync_logs', {
 // User Sessions table
 export const userSessions = pgTable('user_sessions', {
   id: text('id').primaryKey().$defaultFn(() => generateId()),
-  userId: text('userId').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  userId: text('userId').notNull(), // References D1 users
   token: text('token').notNull().unique(), // JWT token ID or session token
   deviceInfo: text('deviceInfo'), // User agent, device type
   ipAddress: text('ipAddress'),
@@ -443,16 +390,16 @@ export const userInvitations = pgTable('user_invitations', {
   permissions: json('permissions'),
   
   // Invitation details
-  invitedBy: text('invitedBy').references(() => users.id).notNull(),
+  invitedBy: text('invitedBy').notNull(), // References D1 users
   inviteToken: text('inviteToken').notNull().unique(),
   message: text('message'), // Custom invitation message
   
   // Status and timing
   status: text('status').notNull().default('pending'), // 'pending', 'accepted', 'expired', 'revoked'
   acceptedAt: timestamp('acceptedAt', { withTimezone: true }),
-  acceptedBy: text('acceptedBy').references(() => users.id),
+  acceptedBy: text('acceptedBy'), // References D1 users
   revokedAt: timestamp('revokedAt', { withTimezone: true }),
-  revokedBy: text('revokedBy').references(() => users.id),
+  revokedBy: text('revokedBy'), // References D1 users
   expiresAt: timestamp('expiresAt', { withTimezone: true }).notNull(),
   
   // Brand association
@@ -471,7 +418,7 @@ export const auditLogs = pgTable('audit_logs', {
   id: text('id').primaryKey().$defaultFn(() => generateId()),
   
   // User and session info
-  userId: text('userId').references(() => users.id),
+  userId: text('userId'), // References D1 users
   userName: text('userName'),
   userEmail: text('userEmail'),
   sessionId: text('sessionId').references(() => userSessions.id),
@@ -521,7 +468,7 @@ export const securityEvents = pgTable('security_events', {
   category: text('category').notNull(), // 'authentication', 'authorization', 'data_access', etc.
   
   // User and session
-  userId: text('userId').references(() => users.id),
+  userId: text('userId'), // References D1 users
   userEmail: text('userEmail'),
   sessionId: text('sessionId').references(() => userSessions.id),
   
@@ -538,7 +485,7 @@ export const securityEvents = pgTable('security_events', {
   // Response
   resolved: boolean('resolved').notNull().default(false),
   resolvedAt: timestamp('resolvedAt', { withTimezone: true }),
-  resolvedBy: text('resolvedBy').references(() => users.id),
+  resolvedBy: text('resolvedBy'), // References D1 users
   resolution: text('resolution'),
   
   createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
@@ -620,7 +567,7 @@ export const analyticsEvents = pgTable('analytics_events', {
   // Resource references
   articleId: text('articleId').references(() => articles.id),
   categoryId: text('categoryId').references(() => categories.id),
-  userId: text('userId').references(() => users.id),
+  userId: text('userId'), // References D1 users
   
   // Session and user tracking
   sessionId: text('sessionId').notNull(),
@@ -660,7 +607,7 @@ export const userBehaviorAnalytics = pgTable('user_behavior_analytics', {
   id: text('id').primaryKey().$defaultFn(() => generateId()),
   
   // User identification
-  userId: text('userId').references(() => users.id),
+  userId: text('userId'), // References D1 users
   visitorId: text('visitorId').notNull(), // For anonymous users
   sessionId: text('sessionId').notNull(),
   
@@ -752,7 +699,7 @@ export const workflowHistory = pgTable('workflow_history', {
   articleId: text('articleId').references(() => articles.id),
   fromStatus: text('fromStatus').notNull(),
   toStatus: text('toStatus').notNull(),
-  userId: text('userId').references(() => users.id),
+  userId: text('userId'), // References D1 users
   userName: text('userName').notNull(),
   userRole: text('userRole').notNull(),
   reason: text('reason'),
@@ -801,8 +748,7 @@ export type BeehiivSyncLog = typeof beehiivSyncLogs.$inferSelect;
 export type NewBeehiivSyncLog = typeof beehiivSyncLogs.$inferInsert;
 
 // User Management Types
-export type User = typeof users.$inferSelect;
-export type NewUser = typeof users.$inferInsert;
+// User types removed - using D1 for user management
 
 export type UserSession = typeof userSessions.$inferSelect;
 export type NewUserSession = typeof userSessions.$inferInsert;
@@ -849,7 +795,7 @@ export const mediaFiles = pgTable('media_files', {
   r2Key: text('r2Key').notNull().unique(), // Chave no R2
   internalUrl: text('internalUrl').notNull(), // URL servida pelo Worker
   module: text('module').notNull().default('general'), // 'articles', 'profiles', etc.
-  uploadedBy: text('uploadedBy').references(() => users.id),
+  uploadedBy: text('uploadedBy'), // References D1 users
   description: text('description'),
   tags: json('tags').default([]), // Array de tags
   metadata: json('metadata').default({}), // Metadados adicionais

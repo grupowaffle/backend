@@ -16,6 +16,8 @@ export interface DashboardOverview {
     total: number;
     published: number;
     inReview: number;
+    solicitadoMudancas: number;
+    revisado: number;
     approved: number;
     drafts: number;
     beehiivPending: number;
@@ -251,6 +253,8 @@ export class DashboardService {
       total: 0,
       published: 0,
       inReview: 0,
+      solicitadoMudancas: 0,
+      revisado: 0,
       approved: 0,
       drafts: 0,
       beehiivPending: 0,
@@ -267,6 +271,12 @@ export class DashboardService {
           break;
         case 'review':
           overview.inReview = countNum;
+          break;
+        case 'solicitado_mudancas':
+          overview.solicitadoMudancas = countNum;
+          break;
+        case 'revisado':
+          overview.revisado = countNum;
           break;
         case 'approved':
           overview.approved = countNum;

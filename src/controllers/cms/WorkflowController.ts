@@ -3,6 +3,8 @@ import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { WorkflowService, WorkflowStatus } from '../../services/WorkflowService';
 import { getDrizzleClient } from '../../config/db';
+import { workflowHistory } from '../../config/db/schema';
+import { eq } from 'drizzle-orm';
 import { Env } from '../../config/types/common';
 import { authMiddleware } from '../../middlewares/auth';
 
@@ -13,6 +15,8 @@ const transitionSchema = z.object({
     'beehiiv_pending',
     'draft', 
     'review',
+    'solicitado_mudancas',
+    'revisado',
     'approved',
     'published',
     'archived',
@@ -29,11 +33,19 @@ const assignArticleSchema = z.object({
   assignedToUserId: z.string().min(1, 'Assigned user ID is required'),
 });
 
+const requestChangesSchema = z.object({
+  articleId: z.string().min(1, 'Article ID is required'),
+  changesRequested: z.string().min(1, 'Changes requested is required'),
+  reason: z.string().optional(),
+});
+
 const statusFilterSchema = z.object({
   status: z.enum([
     'beehiiv_pending',
     'draft', 
     'review',
+    'solicitado_mudancas',
+    'revisado',
     'approved',
     'published',
     'archived',
@@ -58,8 +70,7 @@ export class WorkflowController {
   }
 
   private setupRoutes() {
-    // Middleware de autenticação para todas as rotas
-    this.app.use('*', authMiddleware);
+    // Middleware de autenticação já é aplicado no createCMSRoutes
 
     // Transicionar status de artigo
     this.app.post('/transition', zValidator('json', transitionSchema), async (c) => {
@@ -118,6 +129,87 @@ export class WorkflowController {
       }
     });
 
+    // Solicitar mudanças em um artigo
+    this.app.post('/request-changes', authMiddleware, zValidator('json', requestChangesSchema), async (c) => {
+      try {
+        console.log('🔍 [REQUEST-CHANGES] Iniciando solicitação de mudanças');
+        console.log('🔍 [REQUEST-CHANGES] Headers:', Object.fromEntries(c.req.raw.headers.entries()));
+        console.log('🔍 [REQUEST-CHANGES] Content-Type:', c.req.header('content-type'));
+        
+        const user = c.get('user');
+        const data = c.req.valid('json');
+        
+        console.log('📝 [REQUEST-CHANGES] Dados validados:', data);
+
+        console.log('👤 [REQUEST-CHANGES] Usuário:', user);
+        console.log('📝 [REQUEST-CHANGES] Dados recebidos:', data);
+
+        // Verificar se o usuário está autenticado
+        if (!user) {
+          console.log('❌ [REQUEST-CHANGES] Usuário não autenticado');
+          return c.json({
+            success: false,
+            error: 'Usuário não autenticado'
+          }, 401);
+        }
+
+        // Verificar se o usuário tem permissão para solicitar mudanças
+        if (!['revisor', 'editor-chefe', 'admin', 'super_admin'].includes(user.role)) {
+          console.log('❌ [REQUEST-CHANGES] Usuário sem permissão:', user.role);
+          return c.json({
+            success: false,
+            error: 'Usuário não tem permissão para solicitar mudanças',
+          }, 403);
+        }
+
+        console.log('✅ [REQUEST-CHANGES] Usuário autorizado, fazendo transição...');
+        console.log('📝 [REQUEST-CHANGES] Dados para transição:', {
+          articleId: data.articleId,
+          toStatus: 'solicitado_mudancas',
+          userId: user.id,
+          userName: user.name || user.email,
+          userRole: user.role,
+          feedback: data.changesRequested,
+          reason: data.reason,
+        });
+
+        // Fazer a transição para 'solicitado_mudancas' com feedback
+        const result = await this.workflowService.transitionStatus(
+          data.articleId,
+          'solicitado_mudancas',
+          user.id,
+          user.name || user.email,
+          user.role,
+          {
+            feedback: data.changesRequested,
+            reason: data.reason,
+          }
+        );
+
+        console.log('🔄 [REQUEST-CHANGES] Resultado da transição:', result);
+
+        if (result.success) {
+          return c.json({
+            success: true,
+            message: 'Mudanças solicitadas com sucesso',
+            data: result.article,
+          });
+        } else {
+          return c.json({
+            success: false,
+            error: result.message,
+          }, 400);
+        }
+      } catch (error) {
+        console.error('❌ [REQUEST-CHANGES] Erro:', error);
+        console.error('❌ [REQUEST-CHANGES] Stack:', error instanceof Error ? error.stack : 'No stack');
+        return c.json({
+          success: false,
+          error: error instanceof Error ? error.message : 'Erro ao solicitar mudanças',
+        }, 500);
+      }
+    });
+
     // Obter artigos por status
     this.app.get('/articles', zValidator('query', statusFilterSchema), async (c) => {
       try {
@@ -169,20 +261,57 @@ export class WorkflowController {
       }
     });
 
+    // Endpoint de teste para inserir histórico diretamente
+    this.app.post('/test-insert-history', async (c) => {
+      try {
+        const testData = {
+          id: 'test_' + Date.now(),
+          articleId: 'id_3rfxd6jvwmgb0dubu',
+          fromStatus: 'review',
+          toStatus: 'solicitado_mudancas',
+          userId: 'test_user',
+          userName: 'Test User',
+          userRole: 'revisor',
+          reason: 'Teste direto',
+          feedback: 'Este é um teste de inserção direta',
+          createdAt: new Date(),
+        };
+
+        console.log('🧪 [TEST-INSERT] Inserindo dados de teste:', testData);
+        
+        const result = await this.workflowService.recordWorkflowHistory(testData);
+        console.log('🧪 [TEST-INSERT] Resultado:', result);
+
+        return c.json({
+          success: true,
+          message: 'Teste de inserção realizado',
+          data: testData,
+        });
+      } catch (error) {
+        console.error('❌ [TEST-INSERT] Erro:', error);
+        return c.json({
+          success: false,
+          error: error instanceof Error ? error.message : 'Erro no teste',
+        }, 500);
+      }
+    });
+
     // Obter histórico de workflow de um artigo
     this.app.get('/articles/:id/history', async (c) => {
       try {
         const articleId = c.req.param('id');
+        console.log('🔍 [WORKFLOW-HISTORY] Buscando histórico para artigo:', articleId);
 
         // Getting workflow history
-
         const history = await this.workflowService.getWorkflowHistory(articleId);
+        console.log('📝 [WORKFLOW-HISTORY] Histórico encontrado:', history);
 
         return c.json({
           success: true,
           data: history,
         });
       } catch (error) {
+        console.error('❌ [WORKFLOW-HISTORY] Erro:', error);
         // Error getting workflow history
         return c.json({
           success: false,
@@ -342,6 +471,129 @@ export class WorkflowController {
         return c.json({
           success: false,
           error: 'Erro ao processar publicações agendadas',
+        }, 500);
+      }
+    });
+
+    // Debug endpoint para testar inserção de histórico (sem auth para teste)
+    this.app.post('/debug-history', async (c) => {
+      try {
+        const { articleId, feedback, reason } = await c.req.json();
+        
+        console.log('🔍 [DEBUG-HISTORY] Testando inserção:', { articleId, feedback, reason });
+        
+        // Tentar inserir um registro de teste
+        const testRecord = {
+          articleId,
+          fromStatus: 'review',
+          toStatus: 'solicitado_mudancas',
+          userId: 'test-user',
+          userName: 'Test User',
+          userRole: 'revisor',
+          reason: reason || 'Teste de inserção',
+          feedback: feedback || 'Feedback de teste',
+        };
+        
+        console.log('📝 [DEBUG-HISTORY] Inserindo registro de teste:', testRecord);
+        
+        // Inserir diretamente na tabela
+        const db = getDrizzleClient(c.env);
+        const result = await db.insert(workflowHistory).values({
+          id: `test_${Date.now()}`,
+          ...testRecord,
+          createdAt: new Date(),
+        });
+        
+        console.log('✅ [DEBUG-HISTORY] Registro inserido:', result);
+        
+        // Buscar histórico atual
+        const history = await this.workflowService.getWorkflowHistory(articleId);
+        console.log('📝 [DEBUG-HISTORY] Histórico atual:', history);
+        
+        return c.json({
+          success: true,
+          data: history,
+          testRecord,
+        });
+      } catch (error) {
+        console.error('❌ [DEBUG-HISTORY] Erro:', error);
+        return c.json({
+          success: false,
+          error: 'Erro ao testar histórico',
+        }, 500);
+      }
+    });
+
+    // Endpoint GET simples para testar conexão
+    this.app.get('/test-connection', async (c) => {
+      try {
+        console.log('🔍 [TEST-CONNECTION] Testando conexão com banco...');
+        
+        const db = getDrizzleClient(c.env);
+        const result = await db.select().from(workflowHistory).limit(1);
+        
+        console.log('✅ [TEST-CONNECTION] Conexão OK, registros encontrados:', result.length);
+        
+        return c.json({
+          success: true,
+          message: 'Conexão com banco OK',
+          records: result.length,
+        });
+      } catch (error) {
+        console.error('❌ [TEST-CONNECTION] Erro:', error);
+        return c.json({
+          success: false,
+          error: error.message,
+        }, 500);
+      }
+    });
+
+    // Endpoint POST para testar inserção direta (sem auth)
+    this.app.post('/test-insert', async (c) => {
+      try {
+        console.log('🔍 [TEST-INSERT] Testando inserção direta...');
+        
+        const { articleId, feedback, reason } = await c.req.json();
+        
+        const testData = {
+          id: `test_${Date.now()}`,
+          articleId: articleId || 'id_3rfxd6jvwmgb0dubu',
+          fromStatus: 'review',
+          toStatus: 'solicitado_mudancas',
+          userId: 'test-user',
+          userName: 'Test User',
+          userRole: 'revisor',
+          reason: reason || 'Teste de inserção direta',
+          feedback: feedback || 'Feedback de teste direto',
+          createdAt: new Date(),
+        };
+
+        console.log('📝 [TEST-INSERT] Dados para inserir:', testData);
+        
+        const db = getDrizzleClient(c.env);
+        const result = await db.insert(workflowHistory).values(testData);
+        
+        console.log('✅ [TEST-INSERT] Inserção realizada:', result);
+        
+        // Verificar se foi inserido
+        const inserted = await db
+          .select()
+          .from(workflowHistory)
+          .where(eq(workflowHistory.articleId, testData.articleId));
+        
+        console.log('📝 [TEST-INSERT] Dados inseridos:', inserted);
+        
+        return c.json({
+          success: true,
+          message: 'Inserção realizada com sucesso',
+          testData,
+          inserted,
+        });
+      } catch (error) {
+        console.error('❌ [TEST-INSERT] Erro:', error);
+        return c.json({
+          success: false,
+          error: error.message,
         }, 500);
       }
     });

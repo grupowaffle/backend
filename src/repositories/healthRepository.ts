@@ -3,6 +3,7 @@ import { TestUser } from '../config/types/health';
 import { getDrizzleClient, getDatabaseType } from '../lib/database';
 // Users table removed - using D1 for user management
 import { count } from 'drizzle-orm';
+import { CloudflareD1Client } from '../config/types/auth';
 
 export class HealthRepository {
   private env: Env;
@@ -12,32 +13,52 @@ export class HealthRepository {
   }
 
   async getUserCount(): Promise<number> {
-    const db = getDrizzleClient(this.env);
-    const userCountResult = await db.select({ count: count() }).from(users);
-    return userCountResult[0]?.count || 0;
+    // Usar D1 para contagem de usuários
+    const d1Client = new CloudflareD1Client({
+      accountId: this.env.CLOUDFLARE_ACCOUNT_ID,
+      databaseId: this.env.CLOUDFLARE_D1_DATABASE_ID,
+      apiToken: this.env.CLOUDFLARE_API_TOKEN,
+    });
+
+    try {
+      const result = await d1Client.execute('SELECT COUNT(*) as count FROM users WHERE is_active = 1');
+      return result.result?.results?.[0]?.count || 0;
+    } catch (error) {
+      console.error('Erro ao contar usuários:', error);
+      return 0;
+    }
   }
 
   async createTestUser(): Promise<TestUser> {
-    const db = getDrizzleClient(this.env);
-    
-    const now = new Date();
-    const newUserData = {
-      email: `test${Math.ceil(Math.random() * 1000)}@example.com`,
-      name: "Test User",
-      role: "user" as const,
-      createdAt: now,
-      updatedAt: now,
-    };
+    // Usar D1 para criação de usuário de teste
+    const d1Client = new CloudflareD1Client({
+      accountId: this.env.CLOUDFLARE_ACCOUNT_ID,
+      databaseId: this.env.CLOUDFLARE_D1_DATABASE_ID,
+      apiToken: this.env.CLOUDFLARE_API_TOKEN,
+    });
 
-    const [user] = await db.insert(users).values(newUserData).returning();
-    return {
-      id: parseInt(user.id),
-      name: user.name || "Test User",
-      email: user.email,
-      role: user.role,
-      createdAt: user.createdAt,
-      updatedAt: user.updatedAt,
-    };
+    const now = new Date();
+    const testEmail = `test${Math.ceil(Math.random() * 1000)}@example.com`;
+    const userId = `test_${Date.now()}`;
+
+    try {
+      await d1Client.execute(`
+        INSERT INTO users (id, email, display_name, role, is_active, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `, [userId, testEmail, "Test User", "user", 1, now.toISOString(), now.toISOString()]);
+
+      return {
+        id: userId,
+        name: "Test User",
+        email: testEmail,
+        role: "user",
+        createdAt: now,
+        updatedAt: now,
+      };
+    } catch (error) {
+      console.error('Erro ao criar usuário de teste:', error);
+      throw error;
+    }
   }
 
   getDatabaseType(): string {

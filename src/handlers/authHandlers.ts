@@ -54,6 +54,7 @@ export class AuthHandlers {
       const jwtPayload = {
         userId: result.user.id,
         email: result.user.email,
+        name: result.user.name,
         role: result.user.role,
         brand_name: result.user.brandName || null,
         brandId: result.user.brandId || null,

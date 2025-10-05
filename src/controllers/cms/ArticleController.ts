@@ -17,7 +17,7 @@ const createArticleSchema = z.object({
   slug: z.string().min(1, 'Slug is required').optional(),
   content: z.any().optional(),
   excerpt: z.string().optional(),
-  status: z.enum(['beehiiv_pending', 'draft', 'review', 'approved', 'published', 'scheduled', 'archived', 'rejected']).default('draft'),
+  status: z.enum(['beehiiv_pending', 'draft', 'review', 'solicitado_mudancas', 'revisado', 'approved', 'published', 'scheduled', 'archived', 'rejected']).default('draft'),
   publishedAt: z.string().datetime().optional().nullable(),
   scheduledFor: z.string().datetime().optional().nullable(),
   seoTitle: z.string().optional(),

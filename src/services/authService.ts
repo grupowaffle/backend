@@ -343,6 +343,9 @@ export class AuthService {
           // Retornar null para usar os dados do JWT original
           return null;
         }
+        
+        // Se sessionToken não é placeholder, buscar dados atualizados do usuário
+        // Por enquanto, retornar null para usar dados do JWT
         return null;
       } else {
         // Para Neon, validar sessão no banco

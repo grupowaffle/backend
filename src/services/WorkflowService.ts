@@ -15,6 +15,8 @@ export type WorkflowStatus =
   | 'beehiiv_pending'  // Importado do BeehIv, aguardando revisão
   | 'draft'            // Rascunho (artigos manuais ou editados)
   | 'review'           // Em revisão
+  | 'solicitado_mudancas' // Solicitado mudanças pelo revisor
+  | 'revisado'         // Revisado após mudanças solicitadas
   | 'approved'         // Aprovado, pronto para publicação
   | 'published'        // Publicado
   | 'archived'         // Arquivado
@@ -24,7 +26,9 @@ export type WorkflowStatus =
 const WORKFLOW_TRANSITIONS: Record<WorkflowStatus, WorkflowStatus[]> = {
   beehiiv_pending: ['draft', 'review', 'archived'],
   draft: ['review', 'approved', 'published', 'archived', 'rejected'], // Adicionado 'published' para aprovação direta
-  review: ['approved', 'published', 'draft', 'rejected'], // Adicionado 'published' para aprovação direta
+  review: ['approved', 'published', 'draft', 'rejected', 'solicitado_mudancas'], // Adicionado 'solicitado_mudancas'
+  solicitado_mudancas: ['revisado', 'draft', 'archived'], // Pode ser revisado ou voltar para draft
+  revisado: ['review', 'approved', 'published'], // Volta para revisão ou aprovação
   approved: ['published', 'draft'],
   published: ['archived'],
   archived: ['draft'],
@@ -33,12 +37,12 @@ const WORKFLOW_TRANSITIONS: Record<WorkflowStatus, WorkflowStatus[]> = {
 
 // Permissões por role
 const ROLE_PERMISSIONS: Record<string, WorkflowStatus[]> = {
-  super_admin: ['beehiiv_pending', 'draft', 'review', 'approved', 'published', 'archived', 'rejected'], // Acesso total
-  admin: ['beehiiv_pending', 'draft', 'review', 'approved', 'published', 'archived', 'rejected'],
-  'editor-chefe': ['beehiiv_pending', 'draft', 'review', 'approved', 'published', 'rejected'],
-  editor: ['beehiiv_pending', 'draft', 'review'],
-  revisor: ['review', 'approved', 'rejected'],
-  developer: ['beehiiv_pending', 'draft', 'review', 'approved', 'published', 'archived', 'rejected'],
+  super_admin: ['beehiiv_pending', 'draft', 'review', 'solicitado_mudancas', 'revisado', 'approved', 'published', 'archived', 'rejected'], // Acesso total
+  admin: ['beehiiv_pending', 'draft', 'review', 'solicitado_mudancas', 'revisado', 'approved', 'published', 'archived', 'rejected'],
+  'editor-chefe': ['beehiiv_pending', 'draft', 'review', 'solicitado_mudancas', 'revisado', 'approved', 'published', 'rejected'],
+  editor: ['beehiiv_pending', 'draft', 'review', 'solicitado_mudancas', 'revisado'],
+  revisor: ['review', 'solicitado_mudancas', 'revisado', 'approved', 'rejected'],
+  developer: ['beehiiv_pending', 'draft', 'review', 'solicitado_mudancas', 'revisado', 'approved', 'published', 'archived', 'rejected'],
 };
 
 export interface WorkflowTransition {
@@ -82,15 +86,31 @@ export class WorkflowService {
     toStatus: WorkflowStatus, 
     userRole: string
   ): boolean {
+    console.log('🔍 [CAN-TRANSITION] Verificando transição:', { fromStatus, toStatus, userRole });
+    
+    // Super admin tem acesso total
+    if (userRole === 'super_admin') {
+      console.log('👑 [CAN-TRANSITION] Super admin - acesso total concedido');
+      return true;
+    }
+    
     // Verificar se transição é permitida
     const allowedTransitions = WORKFLOW_TRANSITIONS[fromStatus] || [];
+    console.log('📋 [CAN-TRANSITION] Transições permitidas para', fromStatus, ':', allowedTransitions);
+    
     if (!allowedTransitions.includes(toStatus)) {
+      console.log('❌ [CAN-TRANSITION] Transição não permitida pelo workflow');
       return false;
     }
 
     // Verificar permissões do usuário
     const rolePermissions = ROLE_PERMISSIONS[userRole] || [];
-    return rolePermissions.includes(toStatus);
+    console.log('👤 [CAN-TRANSITION] Permissões do role', userRole, ':', rolePermissions);
+    
+    const hasPermission = rolePermissions.includes(toStatus);
+    console.log('✅ [CAN-TRANSITION] Usuário tem permissão?', hasPermission);
+    
+    return hasPermission;
   }
 
   /**
@@ -110,23 +130,29 @@ export class WorkflowService {
     } = {}
   ): Promise<{ success: boolean; message: string; article?: any }> {
     try {
-      // Transitioning article
+      console.log('🔄 [TRANSITION-STATUS] Iniciando transição:', { articleId, toStatus, userId, userRole });
+      console.log('📝 [TRANSITION-STATUS] Opções recebidas:', options);
 
       // Buscar artigo atual
       const article = await this.articleRepository.findById(articleId);
       if (!article) {
+        console.log('❌ [TRANSITION-STATUS] Artigo não encontrado:', articleId);
         return { success: false, message: 'Artigo não encontrado' };
       }
 
       const currentStatus = article.status as WorkflowStatus;
+      console.log('📄 [TRANSITION-STATUS] Artigo encontrado:', { id: article.id, currentStatus, title: article.title });
 
       // Verificar se transição é válida
       if (!this.canTransition(currentStatus, toStatus, userRole)) {
+        console.log('❌ [TRANSITION-STATUS] Transição não permitida:', { currentStatus, toStatus, userRole });
         return { 
           success: false, 
           message: `Transição de ${currentStatus} para ${toStatus} não permitida para ${userRole}` 
         };
       }
+
+      console.log('✅ [TRANSITION-STATUS] Transição autorizada, prosseguindo...');
 
       // Preparar dados de atualização
       const updateData: any = {
@@ -157,14 +183,18 @@ export class WorkflowService {
         updateData.scheduledFor = options.scheduledFor;
       }
 
+      console.log('📝 [TRANSITION-STATUS] Dados de atualização:', updateData);
+
       // Atualizar artigo
       const updatedArticle = await this.articleRepository.update(articleId, updateData);
       if (!updatedArticle) {
+        console.log('❌ [TRANSITION-STATUS] Falha ao atualizar artigo');
         return { success: false, message: 'Falha ao atualizar artigo' };
       }
+      console.log('✅ [TRANSITION-STATUS] Artigo atualizado com sucesso');
 
       // Registrar no histórico
-      await this.recordWorkflowHistory({
+      console.log('📝 [TRANSITION-STATUS] Registrando histórico com dados:', {
         articleId,
         fromStatus: currentStatus,
         toStatus,
@@ -174,6 +204,23 @@ export class WorkflowService {
         reason: options.reason,
         feedback: options.feedback,
       });
+      
+      try {
+        await this.recordWorkflowHistory({
+          articleId,
+          fromStatus: currentStatus,
+          toStatus,
+          userId,
+          userName,
+          userRole,
+          reason: options.reason,
+          feedback: options.feedback,
+        });
+        console.log('✅ [TRANSITION-STATUS] Histórico registrado com sucesso');
+      } catch (historyError) {
+        console.error('❌ [TRANSITION-STATUS] Erro ao registrar histórico:', historyError);
+        // Não falhar a transição por causa do histórico
+      }
 
       // Enviar notificações se necessário
       if (article.authorId && article.authorId !== userId) {
@@ -197,6 +244,8 @@ export class WorkflowService {
       };
 
     } catch (error) {
+      console.error('❌ [TRANSITION-STATUS] Erro na transição:', error);
+      console.error('❌ [TRANSITION-STATUS] Stack:', error instanceof Error ? error.stack : 'No stack');
       // Error in workflow transition
       return {
         success: false,
@@ -208,14 +257,31 @@ export class WorkflowService {
   /**
    * Registrar histórico de workflow
    */
-  private async recordWorkflowHistory(transition: Omit<WorkflowTransition, 'id' | 'createdAt'>): Promise<void> {
+  async recordWorkflowHistory(transition: Omit<WorkflowTransition, 'id' | 'createdAt'>): Promise<void> {
     try {
-      await this.db.insert(workflowHistory).values({
+      console.log('📝 [RECORD-HISTORY] Registrando histórico:', transition);
+      
+      const historyData = {
         id: generateId(),
         ...transition,
         createdAt: new Date(),
-      });
+      };
+      
+      console.log('📝 [RECORD-HISTORY] Dados para inserir:', historyData);
+      console.log('📝 [RECORD-HISTORY] Tipo do banco:', typeof this.db);
+      console.log('📝 [RECORD-HISTORY] Schema workflowHistory:', workflowHistory);
+      
+      const result = await this.db.insert(workflowHistory).values(historyData);
+      console.log('📝 [RECORD-HISTORY] Resultado da inserção:', result);
+      
+      // Verificar se o registro foi inserido
+      const verifyResult = await this.db.select().from(workflowHistory).where(eq(workflowHistory.id, historyData.id));
+      console.log('📝 [RECORD-HISTORY] Verificação pós-inserção:', verifyResult);
+      
+      console.log('✅ [RECORD-HISTORY] Histórico registrado com sucesso');
     } catch (error) {
+      console.error('❌ [RECORD-HISTORY] Erro ao registrar histórico:', error);
+      console.error('❌ [RECORD-HISTORY] Stack trace:', error instanceof Error ? error.stack : 'No stack');
       // Error recording workflow history
       // Não falhar a transição por causa do histórico
     }
@@ -226,14 +292,27 @@ export class WorkflowService {
    */
   async getWorkflowHistory(articleId: string): Promise<WorkflowTransition[]> {
     try {
+      console.log('🔍 [WORKFLOW-SERVICE] Buscando histórico para artigo:', articleId);
+      console.log('🔍 [WORKFLOW-SERVICE] Tipo do banco:', typeof this.db);
+      console.log('🔍 [WORKFLOW-SERVICE] Schema workflowHistory:', workflowHistory);
+      
       const history = await this.db
         .select()
         .from(workflowHistory)
         .where(eq(workflowHistory.articleId, articleId))
         .orderBy(desc(workflowHistory.createdAt));
 
+      console.log('📝 [WORKFLOW-SERVICE] Histórico encontrado:', history);
+      console.log('📝 [WORKFLOW-SERVICE] Quantidade de registros:', history.length);
+      
+      if (history.length > 0) {
+        console.log('📝 [WORKFLOW-SERVICE] Primeiro registro:', history[0]);
+      }
+      
       return history;
     } catch (error) {
+      console.error('❌ [WORKFLOW-SERVICE] Erro ao buscar histórico:', error);
+      console.error('❌ [WORKFLOW-SERVICE] Stack trace:', error instanceof Error ? error.stack : 'No stack');
       // Error getting workflow history
       return [];
     }

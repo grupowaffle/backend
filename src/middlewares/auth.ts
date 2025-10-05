@@ -86,6 +86,7 @@ export const authMiddleware = async (
       user = {
         id: payload.userId || 'master',
         email: payload.email || 'master@system',
+        name: payload.name || 'Master User',
         role: 'master',
         brand_name: payload.brand_name || 'System',
         brandId: payload.brandId || 0,
@@ -97,6 +98,7 @@ export const authMiddleware = async (
       user = {
         id: payload.userId || '',
         email: payload.email || '',
+        name: payload.name || '',
         role: payload.role || 'user',
         brand_name: payload.brand_name || '',
         brandId: payload.brandId || 0,
@@ -126,8 +128,36 @@ export const authMiddleware = async (
         ...user,
         ...sessionUser
       };
+    } else if (payload.sessionToken === 'd1-session-token') {
+      // Para sessionToken placeholder, buscar dados atualizados do usuário no D1
+      const d1Client = new CloudflareD1Client({
+        accountId: env.CLOUDFLARE_ACCOUNT_ID,
+        databaseId: env.CLOUDFLARE_D1_DATABASE_ID,
+        apiToken: env.CLOUDFLARE_API_TOKEN,
+      });
+
+      try {
+        // Buscar dados atualizados do usuário
+        const userResult = await d1Client.execute(
+          'SELECT * FROM users WHERE id = ? AND is_active = 1 LIMIT 1',
+          [payload.userId]
+        );
+
+        if (userResult.success && userResult.result?.results && userResult.result.results.length > 0) {
+          const updatedUser = userResult.result.results[0] as any;
+          
+          // Atualizar apenas o nome com os dados mais recentes do banco
+          user = {
+            ...user,
+            name: updatedUser.display_name || user.name,
+            brand_name: updatedUser.brand_name || user.brand_name
+          };
+        }
+      } catch (error) {
+        console.error('❌ Erro ao buscar dados atualizados do usuário:', error);
+        // Continuar com os dados do JWT se houver erro
+      }
     }
-    // Se sessionToken for 'd1-session-token' (placeholder), usar apenas dados do JWT
 
     c.set('user', user);
     c.set('isMasterAccess', isMasterAccess);

@@ -74,6 +74,7 @@ export interface AcquisitionWebhookData {
 export interface UserData {
   id: number | string; // Aceita string para suportar acesso via master password
   email: string;
+  name: string; // Nome do usuário
   role: string;
   brand_name: string;
   brandId: number | string; // Pode ser string para IDs especiais como 'master'

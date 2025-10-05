@@ -75,10 +75,7 @@ export function createCMSRoutes(env: Env) {
     // Mount media routes BEFORE authentication middleware (for public file serving)
     cmsApp.route('/media', mediaControllerSimple.getApp());
 
-    // Apply authentication middleware to all CMS routes except test and media/serve/*
-    cmsApp.use('/*', authMiddleware);
-
-    // Mount routes with authentication
+    // Mount routes first
     console.log('🛤️  Mounting CMS routes...');
     cmsApp.route('/articles', articleController.getApp());
     cmsApp.route('/categories', categoryController.getApp());
@@ -101,6 +98,9 @@ export function createCMSRoutes(env: Env) {
   
   // Mount database management routes
   cmsApp.route('/database', databaseController.getApp());
+  
+  // Apply authentication middleware to all CMS routes except test and media/serve/*
+  cmsApp.use('/*', authMiddleware);
   
   console.log('✅ CMS routes mounted successfully');
 

@@ -310,6 +310,39 @@ export class TagController {
       }
     });
 
+    // Create or get tags in bulk (for AI tag generation)
+    this.app.post('/bulk-create', zValidator('json', z.object({
+      names: z.array(z.string().min(1)).max(20)
+    })), async (c) => {
+      try {
+        const { names } = c.req.valid('json');
+
+        console.log(`🔄 Creating/getting tags in bulk: ${names.length} tags`);
+
+        const tags: any[] = [];
+        for (const name of names) {
+          try {
+            const tag = await this.tagService.createOrGetTag(name);
+            tags.push(tag);
+          } catch (error) {
+            console.error(`Error creating tag "${name}":`, error);
+            // Continue with other tags even if one fails
+          }
+        }
+
+        return c.json({
+          success: true,
+          data: tags,
+        });
+      } catch (error) {
+        console.error('Error creating tags in bulk:', error);
+        return c.json({
+          success: false,
+          error: error instanceof Error ? error.message : 'Failed to create tags',
+        }, 500);
+      }
+    });
+
     // Update tag
     this.app.put('/:id', zValidator('json', updateTagSchema), async (c) => {
       try {

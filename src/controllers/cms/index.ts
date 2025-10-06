@@ -16,6 +16,7 @@ import { AuditController } from './AuditController';
 import { AnalyticsController } from './AnalyticsController';
 import { DatabaseController } from './DatabaseController';
 import { createSEOController } from './SEOController';
+import { TagAIController } from './TagAIController';
 import { ArticleRepository, CategoryRepository } from '../../repositories';
 import { getDrizzleClient } from '../../config/db';
 import { Env } from '../../config/types/common';
@@ -60,6 +61,7 @@ export function createCMSRoutes(env: Env) {
     const analyticsController = new AnalyticsController(env);
     const databaseController = new DatabaseController(env);
     const seoController = createSEOController(env);
+    const tagAIController = new TagAIController(env);
     console.log('✅ Controllers created');
 
     // Add test route first (public)
@@ -95,6 +97,9 @@ export function createCMSRoutes(env: Env) {
   
   // Mount SEO AI routes
   cmsApp.route('/seo', seoController.getApp());
+  
+  // Mount Tag AI routes
+  cmsApp.route('/tag-ai', tagAIController.getApp());
   
   // Mount database management routes
   cmsApp.route('/database', databaseController.getApp());

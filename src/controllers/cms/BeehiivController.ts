@@ -3,6 +3,8 @@ import { zValidator } from '@hono/zod-validator';
 import { z } from 'zod';
 import { BeehiivService } from '../../services/BeehiivService';
 import { SchedulerService } from '../../services/SchedulerService';
+import { AuthorSyncService } from '../../services/AuthorSyncService';
+import { NotificationService } from '../../services/NotificationService';
 import { BeehiivRepository, ArticleRepository } from '../../repositories';
 import { getDrizzleClient } from '../../config/db';
 import { Env } from '../../config/types/common';
@@ -97,6 +99,8 @@ export class BeehiivController {
   private env: Env;
   private beehiivService: BeehiivService;
   private schedulerService: SchedulerService;
+  private authorSyncService: AuthorSyncService;
+  private notificationService: NotificationService;
   private beehiivRepository: BeehiivRepository;
   private articleRepository: ArticleRepository;
 
@@ -108,6 +112,8 @@ export class BeehiivController {
     const db = getDrizzleClient(env);
     
     this.beehiivService = new BeehiivService(db, env);
+    this.authorSyncService = new AuthorSyncService(db);
+    this.notificationService = new NotificationService(db);
     this.beehiivRepository = new BeehiivRepository(db);
     this.articleRepository = new ArticleRepository(db);
     
@@ -377,10 +383,22 @@ export class BeehiivController {
       try {
         const { publicationId } = c.req.valid('json');
 
+        // ✅ Obter usuário logado e sincronizar autor
+        const user = c.get('user');
+        let authorId = null;
+        
+        if (user?.id) {
+          console.log('🔄 [BEEHIIV SYNC] Sincronizando autor do usuário logado...');
+          authorId = await this.authorSyncService.ensureAuthorForUser(user.id.toString(), user);
+          console.log('✅ [BEEHIIV SYNC] Autor sincronizado:', { authorId });
+        } else {
+          console.log('⚠️ [BEEHIIV SYNC] Sem usuário logado, artigos serão criados sem autor');
+        }
+
         if (publicationId) {
           // Sync from specific publication
           console.log(`🔄 Syncing latest from publication: ${publicationId}`);
-          const result = await this.beehiivService.syncLatestFromPublication(publicationId);
+          const result = await this.beehiivService.syncLatestFromPublication(publicationId, authorId);
           
           return c.json({
             success: result.success,
@@ -390,7 +408,17 @@ export class BeehiivController {
         } else {
           // Sync from all publications
           console.log('🚀 Syncing latest from all publications');
-          const result = await this.beehiivService.syncLatestFromAllPublications();
+          const result = await this.beehiivService.syncLatestFromAllPublications(authorId);
+          
+          // Enviar notificação de sincronização BeehIV
+          if (result.success && result.results.length > 0) {
+            try {
+              const successfulCount = result.results.filter(r => r.success).length;
+              await this.notificationService.notifyBeehiivSync(successfulCount, 'Todas as Publicações');
+            } catch (notificationError) {
+              // Silently fail - notifications should not break the main flow
+            }
+          }
           
           return c.json({
             success: result.success,
@@ -591,6 +619,18 @@ export class BeehiivController {
           }, 400);
         }
 
+        // ✅ Obter usuário logado e sincronizar autor
+        const user = c.get('user');
+        let authorId = null;
+        
+        if (user?.id) {
+          console.log('🔄 [BEEHIIV TEST] Sincronizando autor do usuário logado...');
+          authorId = await this.authorSyncService.ensureAuthorForUser(user.id.toString(), user);
+          console.log('✅ [BEEHIIV TEST] Autor sincronizado:', { authorId });
+        } else {
+          console.log('⚠️ [BEEHIIV TEST] Sem usuário logado, artigos serão criados sem autor');
+        }
+
         console.log(`🧪 Testing conversion for BeehIV post: ${beehiivPostId}`);
 
         // Get the BeehIV post from database
@@ -632,7 +672,7 @@ export class BeehiivController {
         console.log(`🐛 DEBUG RSS Sample (first 1000 chars):`, rssSample);
 
         // Force conversion to multiple articles (NEW)
-        const articles = await this.beehiivService.convertBeehiivPostToMultipleArticles(postResponse, beehiivPost.id);
+        const articles = await this.beehiivService.convertBeehiivPostToMultipleArticles(postResponse, beehiivPost.id, undefined, authorId);
 
         return c.json({
           success: true,
@@ -671,8 +711,20 @@ export class BeehiivController {
       try {
         console.log('🚀 Manual sync-all triggered');
 
+        // ✅ Obter usuário logado e sincronizar autor
+        const user = c.get('user');
+        let authorId = null;
+        
+        if (user?.id) {
+          console.log('🔄 [BEEHIIV SYNC-ALL] Sincronizando autor do usuário logado...');
+          authorId = await this.authorSyncService.ensureAuthorForUser(user.id.toString(), user);
+          console.log('✅ [BEEHIIV SYNC-ALL] Autor sincronizado:', { authorId });
+        } else {
+          console.log('⚠️ [BEEHIIV SYNC-ALL] Sem usuário logado, artigos serão criados sem autor');
+        }
+
         // Use the existing sync/latest endpoint for all publications
-        const result = await this.beehiivService.syncLatestFromAllPublications();
+        const result = await this.beehiivService.syncLatestFromAllPublications(authorId);
 
         return c.json({
           success: result.success,

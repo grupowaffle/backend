@@ -5,6 +5,7 @@ import { getDrizzleClient } from '../../config/db';
 import { ArticleRepository, CategoryRepository, AuthorRepository, TagRepository } from '../../repositories';
 import { authors } from '../../config/db/schema';
 import { EngagementTrackingService } from '../../services/EngagementTrackingService';
+import { ImageCaptionProcessor } from '../../services/ImageCaptionProcessor';
 import { Env } from '../../config/types/common';
 import { eq, desc, and } from 'drizzle-orm';
 
@@ -1639,25 +1640,19 @@ export class PublicAPIController {
       return null;
     }
 
-    // Regex para encontrar tags <img> no conteúdo
-    const imgRegex = /<img[^>]+src=["']([^"']+)["'][^>]*>/i;
-    const match = contentString.match(imgRegex);
+    // Use ImageCaptionProcessor to extract first image with caption
+    const firstImage = ImageCaptionProcessor.extractFirstImageWithCaption(contentString);
 
-    if (match && match[1]) {
-      const imageUrl = match[1];
-
-      // Verificar se é uma URL válida
-      if (imageUrl.startsWith('http') || imageUrl.startsWith('/')) {
-        return {
-          url: imageUrl,
-          alt: articleTitle,
-          width: null,
-          height: null,
-          caption: null,
-          thumbnail: null,
-          source: 'content' // Indica que foi extraída do conteúdo
-        };
-      }
+    if (firstImage) {
+      return {
+        url: firstImage.url,
+        alt: firstImage.alt || articleTitle,
+        width: null,
+        height: null,
+        caption: firstImage.caption || null,
+        thumbnail: null,
+        source: 'content' // Indica que foi extraída do conteúdo
+      };
     }
 
     return null;

@@ -1,510 +1,383 @@
-/**
- * Serviço de notificações para o sistema editorial
- * Gerencia notificações de workflow, novos conteúdos e alertas do sistema
- */
-
 import { DatabaseType } from '../repositories/BaseRepository';
-import { generateId } from '../lib/cuid';
-import { eq, and, desc, count, sql, inArray } from 'drizzle-orm';
-import { notifications } from '../config/db/schema';
+import { Article } from '../config/db/schema';
+import { NotificationSettingsRepository } from '../repositories/NotificationSettingsRepository';
 
-export type NotificationType = 
-  | 'article_status_changed'    // Mudança de status de artigo
-  | 'article_assigned'          // Artigo atribuído
-  | 'article_published'         // Artigo publicado
-  | 'article_rejected'          // Artigo rejeitado
-  | 'new_beehiiv_content'      // Novo conteúdo do BeehIv
-  | 'scheduled_publication'     // Publicação agendada
-  | 'system_alert'             // Alerta do sistema
-  | 'workflow_reminder';       // Lembrete de workflow
-
-export type NotificationPriority = 'low' | 'medium' | 'high' | 'urgent';
-
-export interface NotificationData {
-  id?: string;
-  userId: string;
-  type: NotificationType;
+export interface SlackMessage {
   title: string;
-  message: string;
-  priority: NotificationPriority;
-  data?: Record<string, any>; // Dados específicos da notificação
-  actionUrl?: string;
-  actionText?: string;
-  isRead: boolean;
-  readAt?: Date;
-  createdAt?: Date;
-  expiresAt?: Date;
+  description: string;
+  url?: string;
+  imageUrl?: string;
+  category: 'success' | 'warning' | 'error' | 'info' | 'technology';
+  source: string;
+  author?: string;
+  status?: string;
+  timestamp?: string;
 }
 
-export interface NotificationPreferences {
-  userId: string;
-  emailNotifications: boolean;
-  inAppNotifications: boolean;
-  types: NotificationType[];
+export interface NotificationSettings {
+  id: string;
+  webhookUrl: string;
+  enabled: boolean;
+  notifications: {
+    newArticle: boolean;
+    statusChange: boolean;
+    changeRequest: boolean;
+    approval: boolean;
+    publication: boolean;
+    rejection: boolean;
+    beehiivSync: boolean;
+    archive: boolean;
+  };
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export class NotificationService {
   private db: DatabaseType;
+  private settingsRepository: NotificationSettingsRepository;
 
   constructor(db: DatabaseType) {
     this.db = db;
+    this.settingsRepository = new NotificationSettingsRepository(db);
   }
 
   /**
-   * Criar nova notificação
+   * Enviar notificação para Slack
    */
-  async createNotification(notificationData: Omit<NotificationData, 'id' | 'createdAt' | 'isRead'>): Promise<NotificationData> {
+  async sendSlackNotification(webhookUrl: string, message: SlackMessage): Promise<boolean> {
     try {
-      const notification: NotificationData = {
-        id: generateId(),
-        ...notificationData,
-        isRead: false,
-        createdAt: new Date(),
+      const payload = {
+        text: message.title,
+        attachments: [
+          {
+            color: this.getColorForCategory(message.category),
+            fields: [
+              {
+                title: "Descrição",
+                value: message.description,
+                short: false
+              },
+              {
+                title: "Fonte",
+                value: message.source,
+                short: true
+              },
+              {
+                title: "Categoria",
+                value: message.category,
+                short: true
+              }
+            ],
+            footer: "Portal CMS",
+            ts: Math.floor(Date.now() / 1000)
+          }
+        ]
       };
 
-      const [created] = await this.db
-        .insert(notifications)
-        .values(notification)
-        .returning();
+      // Adicionar campos opcionais
+      if (message.author) {
+        payload.attachments[0].fields.push({
+          title: "Autor",
+          value: message.author,
+          short: true
+        });
+      }
 
-      console.log(`🔔 Notification created: ${notification.title} for user ${notification.userId}`);
+      if (message.status) {
+        payload.attachments[0].fields.push({
+          title: "Status",
+          value: message.status,
+          short: true
+        });
+      }
 
-      return created;
+      if (message.url) {
+        (payload.attachments[0] as any).actions = [
+          {
+            type: "button",
+            text: "Ver Artigo",
+            url: message.url
+          }
+        ];
+      }
+
+      if (message.imageUrl) {
+        (payload.attachments[0] as any).image_url = message.imageUrl;
+      }
+
+      const response = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload)
+      });
+
+      return response.ok;
     } catch (error) {
-      console.error('Error creating notification:', error);
-      throw error;
+      return false;
     }
   }
 
   /**
-   * Criar notificações em lote
+   * Notificar novo artigo criado
    */
-  async createBulkNotifications(notificationsData: Omit<NotificationData, 'id' | 'createdAt' | 'isRead'>[]): Promise<NotificationData[]> {
-    if (notificationsData.length === 0) return [];
-
+  async notifyNewArticle(article: Article, authorName?: string): Promise<void> {
     try {
-      const notificationRecords: NotificationData[] = notificationsData.map(data => ({
-        id: generateId(),
-        ...data,
-        isRead: false,
-        createdAt: new Date(),
-      }));
+      const settings = await this.getNotificationSettings();
+      if (!settings?.enabled || !settings.notifications.newArticle) return;
 
-      const created = await this.db
-        .insert(notifications)
-        .values(notificationRecords)
-        .returning();
+      const message: SlackMessage = {
+        title: "📝 Novo Artigo Criado",
+        description: `"${article.title}" foi criado e está aguardando revisão.`,
+        category: 'info',
+        source: article.source === 'beehiiv' ? 'BeehIV Sync' : 'Portal CMS',
+        author: authorName,
+        status: article.status,
+        timestamp: new Date().toISOString()
+      };
 
-      console.log(`🔔 ${created.length} notifications created in bulk`);
-
-      return created;
+      await this.sendSlackNotification(settings.webhookUrl, message);
     } catch (error) {
-      console.error('Error creating bulk notifications:', error);
-      throw error;
+      // Silently fail - notifications should not break the main flow
     }
   }
 
   /**
-   * Obter notificações do usuário
+   * Notificar mudança de status
    */
-  async getUserNotifications(
-    userId: string,
-    options: {
-      page?: number;
-      limit?: number;
-      unreadOnly?: boolean;
-      type?: NotificationType;
-    } = {}
-  ): Promise<{ notifications: NotificationData[]; total: number; unread: number }> {
-    const { page = 1, limit = 20, unreadOnly = false, type } = options;
-
+  async notifyStatusChange(article: Article, oldStatus: string, newStatus: string, authorName?: string): Promise<void> {
     try {
-      let query = this.db
-        .select()
-        .from(notifications)
-        .where(eq(notifications.userId, userId));
+      const settings = await this.getNotificationSettings();
+      if (!settings?.enabled || !settings.notifications.statusChange) return;
 
-      // Filtros
-      if (unreadOnly) {
-        query = query.where(eq(notifications.isRead, false));
-      }
+      const statusEmojis = {
+        'draft': '📝',
+        'review': '👀',
+        'solicitado_mudancas': '🔄',
+        'revisado': '✅',
+        'approved': '👍',
+        'published': '🚀',
+        'rejected': '❌',
+        'archived': '📦'
+      };
 
-      if (type) {
-        query = query.where(eq(notifications.type, type));
-      }
+      const message: SlackMessage = {
+        title: `${statusEmojis[newStatus] || '📄'} Status do Artigo Alterado`,
+        description: `"${article.title}" mudou de ${oldStatus} para ${newStatus}.`,
+        category: this.getCategoryForStatus(newStatus),
+        source: 'Portal CMS',
+        author: authorName,
+        status: newStatus,
+        timestamp: new Date().toISOString()
+      };
 
-      // Ordenação e paginação
-      const offset = (page - 1) * limit;
-      const results = await query
-        .orderBy(desc(notifications.createdAt))
-        .limit(limit)
-        .offset(offset);
+      await this.sendSlackNotification(settings.webhookUrl, message);
+    } catch (error) {
+      // Silently fail - notifications should not break the main flow
+    }
+  }
 
-      // Contar total
-      let countQuery = this.db
-        .select({ count: count() })
-        .from(notifications)
-        .where(eq(notifications.userId, userId));
+  /**
+   * Notificar solicitação de mudanças
+   */
+  async notifyChangeRequest(article: Article, reason: string, authorName?: string): Promise<void> {
+    try {
+      const settings = await this.getNotificationSettings();
+      if (!settings?.enabled || !settings.notifications.changeRequest) return;
 
-      if (unreadOnly) {
-        countQuery = countQuery.where(eq(notifications.isRead, false));
-      }
+      const message: SlackMessage = {
+        title: "🔄 Mudanças Solicitadas",
+        description: `"${article.title}" - ${reason}`,
+        category: 'warning',
+        source: 'Portal CMS',
+        author: authorName,
+        status: 'solicitado_mudancas',
+        timestamp: new Date().toISOString()
+      };
 
-      if (type) {
-        countQuery = countQuery.where(eq(notifications.type, type));
-      }
+      await this.sendSlackNotification(settings.webhookUrl, message);
+    } catch (error) {
+      // Silently fail - notifications should not break the main flow
+    }
+  }
 
-      const [{ count: total }] = await countQuery;
+  /**
+   * Notificar aprovação
+   */
+  async notifyApproval(article: Article, authorName?: string): Promise<void> {
+    try {
+      const settings = await this.getNotificationSettings();
+      if (!settings?.enabled || !settings.notifications.approval) return;
 
-      // Contar não lidas
-      const [{ count: unread }] = await this.db
-        .select({ count: count() })
-        .from(notifications)
-        .where(
-          and(
-            eq(notifications.userId, userId),
-            eq(notifications.isRead, false)
-          )
-        );
+      const message: SlackMessage = {
+        title: "👍 Artigo Aprovado",
+        description: `"${article.title}" foi aprovado e está pronto para publicação.`,
+        category: 'success',
+        source: 'Portal CMS',
+        author: authorName,
+        status: 'approved',
+        timestamp: new Date().toISOString()
+      };
 
+      await this.sendSlackNotification(settings.webhookUrl, message);
+    } catch (error) {
+      // Silently fail - notifications should not break the main flow
+    }
+  }
+
+  /**
+   * Notificar publicação
+   */
+  async notifyPublication(article: Article, authorName?: string): Promise<void> {
+    try {
+      const settings = await this.getNotificationSettings();
+      if (!settings?.enabled || !settings.notifications.publication) return;
+
+      const message: SlackMessage = {
+        title: "🚀 Artigo Publicado",
+        description: `"${article.title}" foi publicado e está disponível no portal.`,
+        category: 'success',
+        source: 'Portal CMS',
+        author: authorName,
+        status: 'published',
+        timestamp: new Date().toISOString()
+      };
+
+      await this.sendSlackNotification(settings.webhookUrl, message);
+    } catch (error) {
+      // Silently fail - notifications should not break the main flow
+    }
+  }
+
+  /**
+   * Notificar rejeição
+   */
+  async notifyRejection(article: Article, reason: string, authorName?: string): Promise<void> {
+    try {
+      const settings = await this.getNotificationSettings();
+      if (!settings?.enabled || !settings.notifications.rejection) return;
+
+      const message: SlackMessage = {
+        title: "❌ Artigo Rejeitado",
+        description: `"${article.title}" - ${reason}`,
+        category: 'error',
+        source: 'Portal CMS',
+        author: authorName,
+        status: 'rejected',
+        timestamp: new Date().toISOString()
+      };
+
+      await this.sendSlackNotification(settings.webhookUrl, message);
+    } catch (error) {
+      // Silently fail - notifications should not break the main flow
+    }
+  }
+
+  /**
+   * Notificar sincronização BeehIV
+   */
+  async notifyBeehiivSync(articleCount: number, newsletterName: string): Promise<void> {
+    try {
+      const settings = await this.getNotificationSettings();
+      if (!settings?.enabled || !settings.notifications.beehiivSync) return;
+
+      const message: SlackMessage = {
+        title: "📰 Sincronização BeehIV",
+        description: `${articleCount} novo(s) artigo(s) sincronizado(s) de "${newsletterName}".`,
+        category: 'technology',
+        source: 'BeehIV Sync',
+        timestamp: new Date().toISOString()
+      };
+
+      await this.sendSlackNotification(settings.webhookUrl, message);
+    } catch (error) {
+      // Silently fail - notifications should not break the main flow
+    }
+  }
+
+  /**
+   * Notificar arquivamento
+   */
+  async notifyArchive(article: Article, authorName?: string): Promise<void> {
+    try {
+      const settings = await this.getNotificationSettings();
+      if (!settings?.enabled || !settings.notifications.archive) return;
+
+      const message: SlackMessage = {
+        title: "📦 Artigo Arquivado",
+        description: `"${article.title}" foi arquivado.`,
+        category: 'info',
+        source: 'Portal CMS',
+        author: authorName,
+        status: 'archived',
+        timestamp: new Date().toISOString()
+      };
+
+      await this.sendSlackNotification(settings.webhookUrl, message);
+    } catch (error) {
+      // Silently fail - notifications should not break the main flow
+    }
+  }
+
+  /**
+   * Obter configurações de notificação
+   */
+  async getNotificationSettings(): Promise<NotificationSettings | null> {
+    try {
+      const settings = await this.settingsRepository.getSettings();
+      if (!settings) return null;
+      
+      // Ensure enabled is boolean, not null
       return {
-        notifications: results,
-        total: Number(total),
-        unread: Number(unread),
+        ...settings,
+        enabled: settings.enabled ?? false
       };
     } catch (error) {
-      console.error('Error getting user notifications:', error);
-      return { notifications: [], total: 0, unread: 0 };
+      return null;
     }
   }
 
   /**
-   * Marcar notificação como lida
+   * Salvar configurações de notificação
    */
-  async markAsRead(notificationId: string, userId: string): Promise<boolean> {
+  async saveNotificationSettings(settings: Omit<NotificationSettings, 'id' | 'createdAt' | 'updatedAt'>): Promise<boolean> {
     try {
-      const result = await this.db
-        .update(notifications)
-        .set({
-          isRead: true,
-          readAt: new Date(),
-        })
-        .where(
-          and(
-            eq(notifications.id, notificationId),
-            eq(notifications.userId, userId)
-          )
-        );
-
+      await this.settingsRepository.saveSettings(settings);
       return true;
     } catch (error) {
-      console.error('Error marking notification as read:', error);
       return false;
     }
   }
 
   /**
-   * Marcar todas as notificações como lidas
+   * Obter cor para categoria
    */
-  async markAllAsRead(userId: string): Promise<number> {
-    try {
-      const result = await this.db
-        .update(notifications)
-        .set({
-          isRead: true,
-          readAt: new Date(),
-        })
-        .where(
-          and(
-            eq(notifications.userId, userId),
-            eq(notifications.isRead, false)
-          )
-        );
-
-      console.log(`✅ Marked all notifications as read for user ${userId}`);
-      
-      return 0; // TODO: retornar número de notificações marcadas
-    } catch (error) {
-      console.error('Error marking all notifications as read:', error);
-      return 0;
-    }
+  private getColorForCategory(category: string): string {
+    const colors = {
+      success: '#22c55e',
+      warning: '#f59e0b',
+      error: '#ef4444',
+      info: '#3b82f6',
+      technology: '#8b5cf6'
+    };
+    return colors[category] || colors.info;
   }
 
   /**
-   * Deletar notificação
+   * Obter categoria para status
    */
-  async deleteNotification(notificationId: string, userId: string): Promise<boolean> {
-    try {
-      const result = await this.db
-        .delete(notifications)
-        .where(
-          and(
-            eq(notifications.id, notificationId),
-            eq(notifications.userId, userId)
-          )
-        );
-
-      return true;
-    } catch (error) {
-      console.error('Error deleting notification:', error);
-      return false;
-    }
-  }
-
-  /**
-   * Limpar notificações antigas
-   */
-  async cleanupOldNotifications(olderThanDays: number = 30): Promise<number> {
-    try {
-      const cutoffDate = new Date();
-      cutoffDate.setDate(cutoffDate.getDate() - olderThanDays);
-
-      const result = await this.db
-        .delete(notifications)
-        .where(sql`${notifications.createdAt} < ${cutoffDate}`);
-
-      console.log(`🧹 Cleaned up old notifications older than ${olderThanDays} days`);
-      
-      return 0; // TODO: retornar número de notificações removidas
-    } catch (error) {
-      console.error('Error cleaning up old notifications:', error);
-      return 0;
-    }
-  }
-
-  // Métodos de conveniência para tipos específicos de notificação
-
-  /**
-   * Notificar mudança de status de artigo
-   */
-  async notifyArticleStatusChanged(
-    articleId: string,
-    articleTitle: string,
-    fromStatus: string,
-    toStatus: string,
-    changedBy: string,
-    affectedUserId: string,
-    feedback?: string
-  ): Promise<void> {
-    const priority: NotificationPriority = toStatus === 'rejected' ? 'high' : 'medium';
-    
-    let title = '';
-    let message = '';
-    let actionUrl = `/articles/${articleId}`;
-
-    switch (toStatus) {
+  private getCategoryForStatus(status: string): 'success' | 'warning' | 'error' | 'info' {
+    switch (status) {
       case 'published':
-        title = 'Artigo publicado';
-        message = `Seu artigo "${articleTitle}" foi publicado`;
-        break;
       case 'approved':
-        title = 'Artigo aprovado';
-        message = `Seu artigo "${articleTitle}" foi aprovado e está pronto para publicação`;
-        break;
+        return 'success';
       case 'rejected':
-        title = 'Artigo rejeitado';
-        message = `Seu artigo "${articleTitle}" foi rejeitado${feedback ? ': ' + feedback : ''}`;
-        break;
-      case 'review':
-        title = 'Artigo em revisão';
-        message = `Seu artigo "${articleTitle}" está em revisão`;
-        break;
+        return 'error';
+      case 'solicitado_mudancas':
+        return 'warning';
       default:
-        title = 'Status do artigo alterado';
-        message = `Seu artigo "${articleTitle}" mudou de status: ${fromStatus} → ${toStatus}`;
-    }
-
-    await this.createNotification({
-      userId: affectedUserId,
-      type: 'article_status_changed',
-      title,
-      message,
-      priority,
-      data: {
-        articleId,
-        articleTitle,
-        fromStatus,
-        toStatus,
-        changedBy,
-        feedback,
-      },
-      actionUrl,
-      actionText: 'Ver artigo',
-    });
-  }
-
-  /**
-   * Notificar atribuição de artigo
-   */
-  async notifyArticleAssigned(
-    articleId: string,
-    articleTitle: string,
-    assignedToUserId: string,
-    assignedByUserName: string
-  ): Promise<void> {
-    await this.createNotification({
-      userId: assignedToUserId,
-      type: 'article_assigned',
-      title: 'Artigo atribuído',
-      message: `O artigo "${articleTitle}" foi atribuído a você por ${assignedByUserName}`,
-      priority: 'medium',
-      data: {
-        articleId,
-        articleTitle,
-        assignedByUserName,
-      },
-      actionUrl: `/articles/${articleId}`,
-      actionText: 'Revisar artigo',
-    });
-  }
-
-  /**
-   * Notificar novo conteúdo BeehIiv
-   */
-  async notifyNewBeehiivContent(
-    articleId: string,
-    articleTitle: string,
-    publicationName: string,
-    editorsAndReviewers: string[]
-  ): Promise<void> {
-    if (editorsAndReviewers.length === 0) return;
-
-    const notificationsData = editorsAndReviewers.map(userId => ({
-      userId,
-      type: 'new_beehiiv_content' as NotificationType,
-      title: 'Novo conteúdo BeehIiv',
-      message: `Nova newsletter "${articleTitle}" de ${publicationName} importada e aguarda revisão`,
-      priority: 'low' as NotificationPriority,
-      data: {
-        articleId,
-        articleTitle,
-        publicationName,
-      },
-      actionUrl: `/articles/${articleId}`,
-      actionText: 'Revisar conteúdo',
-    }));
-
-    await this.createBulkNotifications(notificationsData);
-  }
-
-  /**
-   * Notificar administradores sobre alertas do sistema
-   */
-  async notifySystemAlert(
-    title: string,
-    message: string,
-    priority: NotificationPriority = 'medium',
-    data?: Record<string, any>
-  ): Promise<void> {
-    try {
-      // Buscar todos os administradores
-      const admins = await this.db
-        .select({ id: users.id })
-        .from(users)
-        .where(eq(users.role, 'admin'));
-
-      if (admins.length === 0) return;
-
-      const notificationsData = admins.map(admin => ({
-        userId: admin.id.toString(),
-        type: 'system_alert' as NotificationType,
-        title,
-        message,
-        priority,
-        data,
-      }));
-
-      await this.createBulkNotifications(notificationsData);
-    } catch (error) {
-      console.error('Error notifying system alert:', error);
-    }
-  }
-
-  /**
-   * Notificar lembretes de workflow
-   */
-  async notifyWorkflowReminders(): Promise<void> {
-    try {
-      // TODO: Implementar lógica para encontrar artigos em revisão há muito tempo
-      // e notificar os responsáveis
-      console.log('🔔 Processing workflow reminders...');
-      
-      // Por enquanto, apenas log
-      // Em uma implementação real, buscaria artigos em 'review' há mais de X horas
-      // e notificaria os revisores
-    } catch (error) {
-      console.error('Error processing workflow reminders:', error);
-    }
-  }
-
-  /**
-   * Obter estatísticas de notificações
-   */
-  async getNotificationStats(userId?: string): Promise<{
-    total: number;
-    unread: number;
-    byType: Record<NotificationType, number>;
-    byPriority: Record<NotificationPriority, number>;
-  }> {
-    try {
-      let whereClause = sql`1 = 1`;
-      if (userId) {
-        whereClause = eq(notifications.userId, userId);
-      }
-
-      // Total e não lidas
-      const [totals] = await this.db
-        .select({
-          total: count(),
-          unread: count(sql`CASE WHEN ${notifications.isRead} = false THEN 1 END`),
-        })
-        .from(notifications)
-        .where(whereClause);
-
-      // Por tipo
-      const byTypeQuery = await this.db
-        .select({
-          type: notifications.type,
-          count: count(),
-        })
-        .from(notifications)
-        .where(whereClause)
-        .groupBy(notifications.type);
-
-      // Por prioridade
-      const byPriorityQuery = await this.db
-        .select({
-          priority: notifications.priority,
-          count: count(),
-        })
-        .from(notifications)
-        .where(whereClause)
-        .groupBy(notifications.priority);
-
-      const byType: Record<string, number> = {};
-      byTypeQuery.forEach(({ type, count }) => {
-        byType[type] = Number(count);
-      });
-
-      const byPriority: Record<string, number> = {};
-      byPriorityQuery.forEach(({ priority, count }) => {
-        byPriority[priority] = Number(count);
-      });
-
-      return {
-        total: Number(totals.total),
-        unread: Number(totals.unread),
-        byType: byType as Record<NotificationType, number>,
-        byPriority: byPriority as Record<NotificationPriority, number>,
-      };
-    } catch (error) {
-      console.error('Error getting notification stats:', error);
-      return {
-        total: 0,
-        unread: 0,
-        byType: {} as Record<NotificationType, number>,
-        byPriority: {} as Record<NotificationPriority, number>,
-      };
+        return 'info';
     }
   }
 }

@@ -5,10 +5,12 @@ import { ArticleRepository } from '../../repositories';
 import { NewArticle, authors } from '../../config/db/schema';
 import { generateId } from '../../lib/cuid';
 import { AuthorSyncService } from '../../services/AuthorSyncService';
+import { NotificationService } from '../../services/NotificationService';
 import { getDrizzleClient } from '../../config/db';
 import { ISlugService, SlugService } from '../core/ISlugService';
 import { IExportService, ArticleExportService } from '../core/IExportService';
 import { IAuthorizationService, ArticleAuthorizationService } from '../core/IAuthorizationService';
+import { ImageCaptionProcessor } from '../../services/ImageCaptionProcessor';
 import { eq } from 'drizzle-orm';
 
 // Validation schemas
@@ -63,6 +65,7 @@ export class ArticleController {
   private app: Hono;
   private articleRepository: ArticleRepository;
   private authorSyncService: AuthorSyncService;
+  private notificationService: NotificationService;
   private slugService: ISlugService;
   private exportService: IExportService;
   private authorizationService: IAuthorizationService;
@@ -78,6 +81,7 @@ export class ArticleController {
     this.articleRepository = articleRepository;
     const db = getDrizzleClient(env);
     this.authorSyncService = new AuthorSyncService(db);
+    this.notificationService = new NotificationService(db);
     this.slugService = slugService || new SlugService();
     this.exportService = exportService || new ArticleExportService();
     this.authorizationService = authorizationService || new ArticleAuthorizationService();
@@ -258,9 +262,28 @@ export class ArticleController {
           console.log('⚠️ [CREATE ARTICLE] Sem usuário logado, não foi possível sincronizar autor');
         }
 
+        // Process image captions from content
+        let processedContent = data.content;
+        if (typeof data.content === 'string') {
+          console.log('🖼️ [CREATE ARTICLE] Processing image captions...');
+          const imageCaptions = ImageCaptionProcessor.processContentImages(data.content);
+          console.log('🖼️ [CREATE ARTICLE] Found images with captions:', imageCaptions);
+          
+          // Update content with processed captions
+          processedContent = ImageCaptionProcessor.updateImageCaptions(data.content, 
+            imageCaptions.reduce((acc, img) => {
+              if (img.caption) {
+                acc[img.url] = img.caption;
+              }
+              return acc;
+            }, {} as Record<string, string>)
+          );
+        }
+
         // Parse dates
         const articleData: NewArticle = {
           ...data,
+          content: processedContent,
           id: generateId(),
           authorId: authorId || undefined,
           editorId: user?.id?.toString() || null,
@@ -271,6 +294,13 @@ export class ArticleController {
         };
 
         const article = await this.articleRepository.create(articleData);
+
+        // Enviar notificação de novo artigo
+        try {
+          await this.notificationService.notifyNewArticle(article, user?.name);
+        } catch (notificationError) {
+          // Silently fail - notifications should not break the main flow
+        }
 
         return c.json({
           success: true,
@@ -399,9 +429,28 @@ export class ArticleController {
           console.log('✅ [UPDATE ARTICLE] Autor sincronizado:', { authorId });
         }
 
+        // Process image captions from content if provided
+        let processedContent = data.content;
+        if (data.content && typeof data.content === 'string') {
+          console.log('🖼️ [UPDATE ARTICLE] Processing image captions...');
+          const imageCaptions = ImageCaptionProcessor.processContentImages(data.content);
+          console.log('🖼️ [UPDATE ARTICLE] Found images with captions:', imageCaptions);
+          
+          // Update content with processed captions
+          processedContent = ImageCaptionProcessor.updateImageCaptions(data.content, 
+            imageCaptions.reduce((acc, img) => {
+              if (img.caption) {
+                acc[img.url] = img.caption;
+              }
+              return acc;
+            }, {} as Record<string, string>)
+          );
+        }
+
         // Parse dates if provided
         const updateData: Partial<NewArticle> = {
           ...data,
+          content: processedContent,
           authorId: authorId || undefined, // Use APENAS o author ID do Neon (nunca do frontend)
           editorId: user?.id?.toString() || null, // Track who edited
         };
@@ -416,6 +465,9 @@ export class ArticleController {
           updateData.featuredUntil = new Date(data.featuredUntil);
         }
 
+        // Obter artigo anterior para comparar status
+        const previousArticle = await this.articleRepository.findById(id);
+        
         const article = await this.articleRepository.update(id, updateData);
 
         if (!article) {
@@ -423,6 +475,20 @@ export class ArticleController {
             success: false,
             error: 'Article not found',
           }, 404);
+        }
+
+        // Enviar notificação de mudança de status se o status mudou
+        if (previousArticle && previousArticle.status !== article.status) {
+          try {
+            await this.notificationService.notifyStatusChange(
+              article, 
+              previousArticle.status, 
+              article.status, 
+              user?.name
+            );
+          } catch (notificationError) {
+            // Silently fail - notifications should not break the main flow
+          }
         }
 
         return c.json({
@@ -693,6 +759,13 @@ export class ArticleController {
             success: false,
             error: 'Erro ao publicar artigo',
           }, 500);
+        }
+
+        // Enviar notificação de publicação
+        try {
+          await this.notificationService.notifyPublication(updatedArticle, user?.name);
+        } catch (notificationError) {
+          // Silently fail - notifications should not break the main flow
         }
 
         return c.json({

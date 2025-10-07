@@ -912,3 +912,25 @@ export type NewTag = typeof tags.$inferInsert;
 
 export type ArticleTag = typeof articleTags.$inferSelect;
 export type NewArticleTag = typeof articleTags.$inferInsert;
+
+// Notification Settings table
+export const notificationSettings = pgTable('notification_settings', {
+  id: text('id').primaryKey().$defaultFn(() => generateId()),
+  webhookUrl: text('webhook_url').notNull(),
+  enabled: boolean('enabled').default(false),
+  notifications: json('notifications').$type<{
+    newArticle: boolean;
+    statusChange: boolean;
+    changeRequest: boolean;
+    approval: boolean;
+    publication: boolean;
+    rejection: boolean;
+    beehiivSync: boolean;
+    archive: boolean;
+  }>().notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type NotificationSettings = typeof notificationSettings.$inferSelect;
+export type NewNotificationSettings = typeof notificationSettings.$inferInsert;

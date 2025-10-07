@@ -69,10 +69,13 @@ export class MediaControllerSimple {
       }
     });
 
-    // Middleware de autenticação
+    // Middleware de autenticação - aplicar em ordem específica
     this.app.use('/upload', authMiddleware);
     this.app.use('/search', authMiddleware);
     this.app.use('/list', authMiddleware);
+    this.app.use('/stats', authMiddleware);
+    this.app.use('/folders', authMiddleware);
+    this.app.use('/health', authMiddleware);
     this.app.use('/', authMiddleware);
     this.app.use('/:id', authMiddleware);
     this.app.use('/delete/*', authMiddleware);
@@ -461,7 +464,8 @@ export class MediaControllerSimple {
         const user = c.get('user');
         const fileId = c.req.param('id');
 
-        console.log(`🗑️ Deleting media file: ${fileId}`);
+        console.log(`🗑️ [DELETE MEDIA] Starting deletion process for file ID: ${fileId}`);
+        console.log(`🗑️ [DELETE MEDIA] User: ${user?.email} (${user?.role})`);
 
         // Buscar arquivo
         const [file] = await this.db
@@ -471,14 +475,18 @@ export class MediaControllerSimple {
           .limit(1);
 
         if (!file) {
+          console.log(`❌ [DELETE MEDIA] File not found: ${fileId}`);
           return c.json({
             success: false,
             error: 'Media file not found'
           }, 404);
         }
 
+        console.log(`🔍 [DELETE MEDIA] Found file: ${file.fileName} (R2 Key: ${file.r2Key})`);
+
         // Verificar se o arquivo está ativo
         if (!file.isActive) {
+          console.log(`❌ [DELETE MEDIA] File is not active: ${fileId}`);
           return c.json({
             success: false,
             error: 'Media file is not active'
@@ -487,19 +495,23 @@ export class MediaControllerSimple {
 
         // Verificar permissão (admin ou dono do arquivo)
         if (user?.role !== 'admin' && file.uploadedBy !== user?.id.toString()) {
+          console.log(`❌ [DELETE MEDIA] Permission denied for user ${user?.email}`);
           return c.json({
             success: false,
             error: 'Permission denied'
           }, 403);
         }
 
-        console.log(`🗑️ Deleting file: ${file.fileName} by ${user?.email}`);
+        console.log(`🗑️ [DELETE MEDIA] Proceeding to delete file: ${file.fileName} by ${user?.email}`);
 
         // Deletar do R2
+        console.log(`🗑️ [DELETE MEDIA] Attempting to delete from R2 with key: ${file.r2Key}`);
         const deleted = await this.r2Service.deleteFromR2(file.r2Key);
+        console.log(`🗑️ [DELETE MEDIA] R2 deletion result: ${deleted}`);
 
         if (deleted) {
           // Marcar como inativo no banco
+          console.log(`🗑️ [DELETE MEDIA] Marking file as inactive in database`);
           await this.db
             .update(mediaFiles)
             .set({ 
@@ -507,6 +519,10 @@ export class MediaControllerSimple {
               updatedAt: new Date()
             })
             .where(eq(mediaFiles.id, fileId));
+          
+          console.log(`✅ [DELETE MEDIA] File successfully deleted: ${fileId}`);
+        } else {
+          console.log(`❌ [DELETE MEDIA] Failed to delete from R2: ${fileId}`);
         }
 
         return c.json({
@@ -515,7 +531,9 @@ export class MediaControllerSimple {
         });
 
       } catch (error) {
-        console.error('Error deleting media file:', error);
+        console.error('❌ [DELETE MEDIA] Error deleting media file:', error);
+        console.error('❌ [DELETE MEDIA] Error details:', error.message);
+        console.error('❌ [DELETE MEDIA] Error stack:', error.stack);
         return c.json({
           success: false,
           error: 'Failed to delete media file'
@@ -592,6 +610,26 @@ export class MediaControllerSimple {
           error: error instanceof Error ? error.message : 'Unknown error'
         }, 500);
       }
+    });
+
+    // Test endpoint para verificar se as rotas estão funcionando
+    this.app.get('/test-routes', async (c) => {
+      return c.json({
+        success: true,
+        message: 'Media routes are working',
+        timestamp: new Date().toISOString(),
+        availableEndpoints: [
+          'GET /',
+          'GET /:id',
+          'POST /upload',
+          'PUT /:id',
+          'DELETE /:id',
+          'DELETE /delete/:id',
+          'GET /stats',
+          'GET /folders',
+          'GET /health'
+        ]
+      });
     });
 
     // Estatísticas de mídia

@@ -368,7 +368,7 @@ export class BeehiivService {
   /**
    * Sync latest post from a specific publication
    */
-  async syncLatestFromPublication(publicationId: string): Promise<{
+  async syncLatestFromPublication(publicationId: string, authorId?: string): Promise<{
     success: boolean;
     message: string;
     post?: any;
@@ -424,7 +424,7 @@ export class BeehiivService {
             };
 
             // Use the new method that extracts multiple articles
-            const articles = await this.convertBeehiivPostToMultipleArticles(postResponse, existingPost.id, envPublication.name);
+            const articles = await this.convertBeehiivPostToMultipleArticles(postResponse, existingPost.id, envPublication.name, authorId);
 
             return {
               success: true,
@@ -445,7 +445,7 @@ export class BeehiivService {
         // Find the internal publication ID
         const internalPublication = await this.beehiivRepository.findPublicationByBeehiivId(publicationId);
         const internalPublicationId = internalPublication?.id || publicationId;
-        const savedPost = await this.saveBeehiivPost(latestPost, internalPublicationId, envPublication.name);
+        const savedPost = await this.saveBeehiivPost(latestPost, internalPublicationId, envPublication.name, authorId);
         
         return {
           success: true,
@@ -504,7 +504,7 @@ export class BeehiivService {
       console.log(`💾 Saving new post: "${latestPost.title}"`);
 
       // Save BeehIiv post with friendly name
-      const savedPost = await this.saveBeehiivPost(latestPost, publication.id, pubFriendlyName);
+      const savedPost = await this.saveBeehiivPost(latestPost, publication.id, pubFriendlyName, authorId);
 
       // Convert to article and save (this will be done in the next step)
       console.log(`✅ Successfully synced: "${latestPost.title}"`);
@@ -527,7 +527,7 @@ export class BeehiivService {
   /**
    * Sync latest posts from all configured publications
    */
-  async syncLatestFromAllPublications(): Promise<{
+  async syncLatestFromAllPublications(authorId?: string): Promise<{
     success: boolean;
     results: Array<{
       publicationId: string;
@@ -558,7 +558,7 @@ export class BeehiivService {
     for (const publication of publications) {
       console.log(`📡 Processing publication: ${publication.name}`);
       
-      const result = await this.syncLatestFromPublication(publication.beehiivId);
+      const result = await this.syncLatestFromPublication(publication.beehiivId, authorId);
       
       results.push({
         publicationId: publication.beehiivId,
@@ -584,7 +584,7 @@ export class BeehiivService {
   /**
    * Save BeehIV post to database
    */
-  async saveBeehiivPost(post: BeehiivPostResponse, publicationId: string, publicationName?: string) {
+  async saveBeehiivPost(post: BeehiivPostResponse, publicationId: string, publicationName?: string, authorId?: string) {
     try {
       console.log(`💾 Saving BeehIV post: ${post.title} (ID: ${post.id})`);
       console.log(`📁 Publication Name received: "${publicationName}"`);
@@ -628,7 +628,7 @@ export class BeehiivService {
       // Convert to multiple articles
       try {
         console.log(`🔄 Converting BeehIV post "${post.title}" to multiple articles...`);
-        const articles = await this.convertBeehiivPostToMultipleArticles(post, result.id, publicationName);
+        const articles = await this.convertBeehiivPostToMultipleArticles(post, result.id, publicationName, authorId);
         console.log(`✅ ${articles.length} articles created from BeehIV post: ${articles.map(a => `${a.id} - "${a.title}"`).join(', ')}`);
       } catch (articleError) {
         console.error(`❌ CRITICAL ERROR: Failed to create articles from BeehIV post "${post.title}":`, {
@@ -655,7 +655,8 @@ export class BeehiivService {
     post: BeehiivPostResponse,
     beehiivPostId: string,
     newsIndex: number,
-    publicationName?: string
+    publicationName?: string,
+    authorId?: string
   ) {
     try {
       console.log(`🔄 Converting noticia to article: ${noticia.titulo}`);
@@ -683,6 +684,7 @@ export class BeehiivService {
         excerpt: noticia.resumo || this.extractExcerptFromHtml(noticia.conteudo_html),
         status: this.mapBeehiivStatus(post.status),
         categoryId: categoryId,
+        authorId: authorId, // ✅ Adicionar authorId do usuário logado
         source: 'beehiiv' as const,
         sourceId: `${post.id}-${newsIndex}`, // Unique source ID for each news
         sourceUrl: post.web_url || null,
@@ -731,7 +733,8 @@ export class BeehiivService {
     news: IndividualNews,
     post: BeehiivPostResponse,
     beehiivPostId: string,
-    newsIndex: number
+    newsIndex: number,
+    publicationName?: string
   ) {
     try {
       console.log(`🔄 Converting individual news to article: ${news.titulo}`);
@@ -1060,7 +1063,7 @@ export class BeehiivService {
   /**
    * Convert BeehIV post to multiple articles (NEW - extracts multiple news)
    */
-  async convertBeehiivPostToMultipleArticles(post: BeehiivPostResponse, beehiivPostId: string, publicationName?: string) {
+  async convertBeehiivPostToMultipleArticles(post: BeehiivPostResponse, beehiivPostId: string, publicationName?: string, authorId?: string) {
     try {
       console.log(`🔄 Converting BeehIV post to multiple articles: ${post.title}`);
 
@@ -1086,7 +1089,7 @@ export class BeehiivService {
 
       if (!rssContent || rssContent.length === 0) {
         console.log('⚠️ No RSS content found, creating single article');
-        return [await this.convertBeehiivPostToArticle(post, beehiivPostId)];
+        return [await this.convertBeehiivPostToArticle(post, beehiivPostId, authorId, publicationName)];
       }
 
       // Extract individual news using new Newsletter Parser
@@ -1110,7 +1113,7 @@ export class BeehiivService {
       if (parserResult.noticias.length === 0) {
         console.log('⚠️ No individual news found with new parser, creating single article');
         console.log('🔍 Falling back to single article creation...');
-        return [await this.convertBeehiivPostToArticle(post, beehiivPostId)];
+        return [await this.convertBeehiivPostToArticle(post, beehiivPostId, authorId, publicationName)];
       }
 
       // Convert each news item to an article
@@ -1118,7 +1121,7 @@ export class BeehiivService {
       for (let i = 0; i < parserResult.noticias.length; i++) {
         const news = parserResult.noticias[i];
         try {
-          const article = await this.convertNoticiaToArticle(news, post, beehiivPostId, i + 1, publicationName);
+          const article = await this.convertNoticiaToArticle(news, post, beehiivPostId, i + 1, publicationName, authorId);
           articles.push(article);
         } catch (error) {
           console.error(`❌ Failed to convert news ${i + 1}: ${news.titulo}`, error);
@@ -1132,14 +1135,14 @@ export class BeehiivService {
     } catch (error) {
       console.error(`❌ Error converting BeehIV post to multiple articles:`, error);
       // Fallback to single article
-      return [await this.convertBeehiivPostToArticle(post, beehiivPostId)];
+      return [await this.convertBeehiivPostToArticle(post, beehiivPostId, authorId, publicationName)];
     }
   }
 
   /**
    * Convert BeehIV post to article (public method for testing)
    */
-  async convertBeehiivPostToArticle(post: BeehiivPostResponse, beehiivPostId: string) {
+  async convertBeehiivPostToArticle(post: BeehiivPostResponse, beehiivPostId: string, authorId?: string, publicationName?: string) {
     try {
       console.log(`🔄 Converting BeehIV post to article: ${post.title}`);
       console.log(`📋 Post data:`, {
@@ -1184,6 +1187,10 @@ export class BeehiivService {
         this.theNewsParser.detectMainCategory(parsedContent.sections) :
         this.detectCategoryFromContent(post.title, parsedContent.blocks);
 
+      console.log(`📁 [CATEGORY DETECTION] Detected category slug: "${detectedCategorySlug}"`);
+      console.log(`📁 [CATEGORY DETECTION] Sections available:`, parsedContent.sections?.length || 0);
+      console.log(`📁 [CATEGORY DETECTION] Post title: "${post.title}"`);
+
       // Get category ID from database
       const categoryId = await this.getCategoryId(detectedCategorySlug);
 
@@ -1198,6 +1205,7 @@ export class BeehiivService {
         excerpt: post.preview_text || this.extractExcerpt(parsedContent.blocks),
         status: this.mapBeehiivStatus(post.status),
         categoryId: categoryId,
+        authorId: authorId, // ✅ Adicionar authorId do usuário logado
         source: 'beehiiv' as const,
         sourceId: post.id, // Store BeehIV post ID in sourceId field
         sourceUrl: post.web_url || null,
@@ -1310,20 +1318,37 @@ export class BeehiivService {
       .map(b => b.data.text)
       .join(' ')).toLowerCase();
 
-    if (content.includes('brasil') || content.includes('governo') || content.includes('política')) {
-      return 'brasil';
-    }
-    if (content.includes('mundo') || content.includes('internacional') || content.includes('guerra')) {
-      return 'internacional';
-    }
-    if (content.includes('economia') || content.includes('mercado') || content.includes('dólar')) {
-      return 'economia';
-    }
-    if (content.includes('tecnologia') || content.includes('tech') || content.includes('ia')) {
-      return 'tecnologia';
+    console.log(`🔍 [CATEGORY DETECTION] Analyzing content: "${content.substring(0, 200)}..."`);
+
+    // Palavras-chave mais específicas para cada categoria
+    const categoryKeywords = {
+      'brasil': ['brasil', 'brasileiro', 'governo', 'política', 'lula', 'bolsonaro', 'congresso', 'senado', 'câmara', 'ministro', 'presidente'],
+      'internacional': ['mundo', 'internacional', 'guerra', 'ucrânia', 'rússia', 'china', 'eua', 'europa', 'onu', 'nato', 'g20'],
+      'economia': ['economia', 'mercado', 'dólar', 'real', 'inflação', 'juros', 'selic', 'bc', 'banco central', 'pib', 'desemprego'],
+      'tecnologia': ['tecnologia', 'tech', 'ia', 'inteligência artificial', 'chatgpt', 'openai', 'google', 'meta', 'apple', 'microsoft', 'startup'],
+      'esportes': ['futebol', 'copa', 'brasileirão', 'flamengo', 'palmeiras', 'corinthians', 'são paulo', 'santos', 'vasco', 'fluminense'],
+      'saude': ['saúde', 'medicina', 'hospital', 'vacina', 'covid', 'pandemia', 'médico', 'enfermeiro', 'sus']
+    };
+
+    // Contar ocorrências de palavras-chave
+    const scores: Record<string, number> = {};
+    
+    for (const [category, keywords] of Object.entries(categoryKeywords)) {
+      scores[category] = keywords.reduce((score, keyword) => {
+        return score + (content.includes(keyword) ? 1 : 0);
+      }, 0);
     }
 
-    return 'geral';
+    console.log(`📊 [CATEGORY DETECTION] Scores:`, scores);
+
+    // Encontrar categoria com maior score
+    const bestCategory = Object.entries(scores).reduce((best, [category, score]) => {
+      return score > best.score ? { category, score } : best;
+    }, { category: 'geral', score: 0 });
+
+    console.log(`🎯 [CATEGORY DETECTION] Best match: ${bestCategory.category} (score: ${bestCategory.score})`);
+
+    return bestCategory.category;
   }
 
   /**

@@ -7,6 +7,8 @@ import { MediaControllerSimple } from './MediaControllerSimple';
 import { TagController } from './TagController';
 import { WorkflowController } from './WorkflowController';
 import { NotificationController } from './NotificationController';
+import { ProfileController } from './ProfileController';
+import { D1RoleController } from './D1RoleController';
 import { DashboardController } from './DashboardController';
 // Removed FeaturedContentController - using articles API with isFeatured parameter instead
 import { UserController } from './UserController';
@@ -17,10 +19,12 @@ import { AnalyticsController } from './AnalyticsController';
 import { DatabaseController } from './DatabaseController';
 import { createSEOController } from './SEOController';
 import { TagAIController } from './TagAIController';
+import { CalendarController } from './CalendarController';
+import { NewsletterController } from './NewsletterController';
 import { ArticleRepository, CategoryRepository } from '../../repositories';
 import { getDrizzleClient } from '../../config/db';
 import { Env } from '../../config/types/common';
-import { authMiddleware, requireRole } from '../../middlewares/auth';
+import { authMiddleware } from '../../middlewares/auth';
 
 /**
  * Create CMS routes with all controllers
@@ -52,6 +56,8 @@ export function createCMSRoutes(env: Env) {
     const tagController = new TagController(env);
     const workflowController = new WorkflowController(env);
     const notificationController = new NotificationController(env);
+    const profileController = new ProfileController(env);
+    const d1RoleController = new D1RoleController(env);
     const dashboardController = new DashboardController(env);
     // Removed featured controllers - using articles API with isFeatured parameter instead
     const userController = new UserController(env);
@@ -62,6 +68,8 @@ export function createCMSRoutes(env: Env) {
     const databaseController = new DatabaseController(env);
     const seoController = createSEOController(env);
     const tagAIController = new TagAIController(env);
+    const calendarController = new CalendarController(env);
+    const newsletterController = new NewsletterController(env);
     console.log('✅ Controllers created');
 
     // Add test route first (public)
@@ -76,8 +84,17 @@ export function createCMSRoutes(env: Env) {
 
     // Mount media routes BEFORE authentication middleware (for public file serving)
     cmsApp.route('/media', mediaControllerSimple.getApp());
+    
+    // Mount profiles routes BEFORE authentication middleware for testing
+    cmsApp.route('/profiles', profileController.getApp());
+    
+    // Mount D1 roles routes BEFORE authentication middleware for testing
+    cmsApp.route('/d1-roles', d1RoleController.getApp());
 
-    // Mount routes first
+    // Apply authentication middleware to all routes except the ones above
+    cmsApp.use('/*', authMiddleware);
+
+    // Mount routes AFTER authentication middleware
     console.log('🛤️  Mounting CMS routes...');
     cmsApp.route('/articles', articleController.getApp());
     cmsApp.route('/categories', categoryController.getApp());
@@ -87,6 +104,9 @@ export function createCMSRoutes(env: Env) {
     cmsApp.route('/tags', tagController.getApp());
     cmsApp.route('/workflow', workflowController.getApp());
     cmsApp.route('/notifications', notificationController.getApp());
+    
+    // Mount profiles routes AFTER authentication middleware
+    // cmsApp.route('/profiles', profileController.getApp());
     cmsApp.route('/dashboard', dashboardController.getApp());
     // Removed featured routes - use /articles?isFeatured=true instead
     cmsApp.route('/users', userController.getApp());
@@ -104,8 +124,11 @@ export function createCMSRoutes(env: Env) {
   // Mount database management routes
   cmsApp.route('/database', databaseController.getApp());
   
-  // Apply authentication middleware to all CMS routes except test and media/serve/*
-  cmsApp.use('/*', authMiddleware);
+  // Mount newsletter routes
+  cmsApp.route('/newsletter', newsletterController.getApp());
+  
+  // Mount calendar routes
+  cmsApp.route('/calendar', calendarController.getApp());
   
   console.log('✅ CMS routes mounted successfully');
 

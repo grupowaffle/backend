@@ -934,3 +934,56 @@ export const notificationSettings = pgTable('notification_settings', {
 
 export type NotificationSettings = typeof notificationSettings.$inferSelect;
 export type NewNotificationSettings = typeof notificationSettings.$inferInsert;
+
+// Profiles table - Armazena perfis de acesso do sistema
+export const profiles = pgTable('profiles', {
+  id: text('id').primaryKey().$defaultFn(() => generateId()),
+  name: text('name').notNull(),
+  description: text('description'),
+  role: text('role').notNull(), // 'super_admin', 'admin', 'editor', etc.
+  permissions: json('permissions').$type<string[]>().notNull().default([]),
+  isActive: boolean('isActive').notNull().default(true),
+  isDefault: boolean('isDefault').notNull().default(false),
+  createdBy: text('createdBy').notNull(), // ID do usuário que criou o perfil
+  createdAt: timestamp('createdAt', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updatedAt', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  roleIdx: index('profiles_role_idx').on(table.role),
+  activeIdx: index('profiles_active_idx').on(table.isActive),
+  createdByIdx: index('profiles_created_by_idx').on(table.createdBy),
+}));
+
+export type Profile = typeof profiles.$inferSelect;
+export type NewProfile = typeof profiles.$inferInsert;
+
+// Calendar Events table
+export const calendarEvents = pgTable('calendar_events', {
+  id: text('id').primaryKey().$defaultFn(() => generateId()),
+  userId: text('user_id').notNull(), // References D1 users
+  title: text('title').notNull(),
+  description: text('description'),
+  category: text('category').notNull().default('custom'),
+  eventDate: text('event_date').notNull(), // YYYY-MM-DD format
+  eventTime: text('event_time'), // HH:MM:SS format
+  isAllDay: boolean('is_all_day').default(false),
+  reminderMinutes: integer('reminder_minutes').default(0),
+  isRecurring: boolean('is_recurring').default(false),
+  recurrencePattern: text('recurrence_pattern'),
+  priority: text('priority').default('medium'),
+  status: text('status').default('active'),
+  newsletters: text('newsletters'), // JSON array of newsletter IDs
+  categories: text('categories'), // JSON array of category IDs
+  location: text('location'), // Local ou canal do evento
+  relevance: text('relevance'), // Relevância e contexto do evento
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  userIdIdx: index('calendar_events_user_id_idx').on(table.userId),
+  eventDateIdx: index('calendar_events_event_date_idx').on(table.eventDate),
+  categoryIdx: index('calendar_events_category_idx').on(table.category),
+  statusIdx: index('calendar_events_status_idx').on(table.status),
+  userDateIdx: index('calendar_events_user_date_idx').on(table.userId, table.eventDate),
+}));
+
+export type CalendarEvent = typeof calendarEvents.$inferSelect;
+export type NewCalendarEvent = typeof calendarEvents.$inferInsert;

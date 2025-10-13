@@ -3,6 +3,7 @@ import { verify } from 'hono/jwt';
 import { Env, UserData } from '../config/types/common';
 import { AuthService } from '../services/authService';
 import { JWTPayload, CloudflareD1Client } from '../config/types/auth';
+import { D1RoleService } from '../services/D1RoleService';
 
 /**
  * Extensão do Context do Hono para incluir variáveis de usuário e acesso master.
@@ -42,6 +43,7 @@ export const authMiddleware = async (
     const devUser: UserData = {
       id: 'dev',
       email: 'dev@localhost',
+      name: 'Developer',
       role: 'developer',
       brand_name: 'Development',
       brandId: 0,
@@ -58,6 +60,7 @@ export const authMiddleware = async (
     const masterUser: UserData = {
       id: 'master',
       email: 'master@system',
+      name: 'Master User',
       role: 'master',
       brand_name: 'System',
       brandId: 0,
@@ -111,9 +114,9 @@ export const authMiddleware = async (
     // Se o JWT contiver sessionToken válido (não placeholder), valida a sessão no D1
     if (payload.sessionToken && payload.sessionToken !== 'd1-session-token') {
       const d1Client = new CloudflareD1Client({
-        accountId: env.CLOUDFLARE_ACCOUNT_ID,
-        databaseId: env.CLOUDFLARE_D1_DATABASE_ID,
-        apiToken: env.CLOUDFLARE_API_TOKEN,
+        accountId: env.CLOUDFLARE_ACCOUNT_ID || '',
+        databaseId: env.CLOUDFLARE_D1_DATABASE_ID || '',
+        apiToken: env.CLOUDFLARE_API_TOKEN || '',
       });
 
       const authHandler = new AuthService(d1Client, env);
@@ -131,27 +134,48 @@ export const authMiddleware = async (
     } else if (payload.sessionToken === 'd1-session-token') {
       // Para sessionToken placeholder, buscar dados atualizados do usuário no D1
       const d1Client = new CloudflareD1Client({
-        accountId: env.CLOUDFLARE_ACCOUNT_ID,
-        databaseId: env.CLOUDFLARE_D1_DATABASE_ID,
-        apiToken: env.CLOUDFLARE_API_TOKEN,
+        accountId: env.CLOUDFLARE_ACCOUNT_ID || '',
+        databaseId: env.CLOUDFLARE_D1_DATABASE_ID || '',
+        apiToken: env.CLOUDFLARE_API_TOKEN || '',
       });
 
       try {
-        // Buscar dados atualizados do usuário
-        const userResult = await d1Client.execute(
-          'SELECT * FROM users WHERE id = ? AND is_active = 1 LIMIT 1',
-          [payload.userId]
-        );
+        // Buscar dados atualizados do usuário com role
+        const roleService = new D1RoleService(d1Client);
+        const userWithRole = await roleService.getUserWithRole(payload.userId);
 
-        if (userResult.success && userResult.result?.results && userResult.result.results.length > 0) {
-          const updatedUser = userResult.result.results[0] as any;
+        if (userWithRole) {
+          console.log('🔧 [AUTH MIDDLEWARE] Dados do usuário do D1:', {
+            id: userWithRole.id,
+            email: userWithRole.email,
+            name: userWithRole.name,
+            role: userWithRole.role,
+            permissions: userWithRole.permissions,
+            roles: userWithRole.roles,
+            allRoles: userWithRole.allRoles,
+            cmsRole: userWithRole.cmsRole
+          });
           
-          // Atualizar apenas o nome com os dados mais recentes do banco
+          // Atualizar usuário com dados do D1 incluindo role e permissões
           user = {
             ...user,
-            name: updatedUser.display_name || user.name,
-            brand_name: updatedUser.brand_name || user.brand_name
+            id: userWithRole.id,
+            email: userWithRole.email,
+            name: userWithRole.name,
+            role: userWithRole.role,
+            brand_name: userWithRole.brand_name,
+            brandId: userWithRole.brandId,
+            permissions: userWithRole.permissions || [],
+            roles: userWithRole.roles || []
           };
+          
+          console.log('🔧 [AUTH MIDDLEWARE] Usuário final configurado:', {
+            id: user.id,
+            email: user.email,
+            role: user.role,
+            permissions: user.permissions,
+            roles: user.roles
+          });
         }
       } catch (error) {
         console.error('❌ Erro ao buscar dados atualizados do usuário:', error);
@@ -167,18 +191,29 @@ export const authMiddleware = async (
     // Fallback: tenta validar o token como sessionToken no D1
     try {
       const d1Client = new CloudflareD1Client({
-        accountId: env.CLOUDFLARE_ACCOUNT_ID,
-        databaseId: env.CLOUDFLARE_D1_DATABASE_ID,
-        apiToken: env.CLOUDFLARE_API_TOKEN,
+        accountId: env.CLOUDFLARE_ACCOUNT_ID || '',
+        databaseId: env.CLOUDFLARE_D1_DATABASE_ID || '',
+        apiToken: env.CLOUDFLARE_API_TOKEN || '',
       });
 
       const authHandler = new AuthService(d1Client, env);
       const sessionUser = await authHandler.validateSession(token);
 
       if (sessionUser) {
-        c.set('user', sessionUser);
-        c.set('isMasterAccess', sessionUser.role === 'master' || sessionUser.permissions?.includes('*'));
-        return next();
+        // Buscar dados completos do usuário com role
+        const roleService = new D1RoleService(d1Client);
+        const userWithRole = await roleService.getUserWithRole(sessionUser.id);
+
+        if (userWithRole) {
+          c.set('user', userWithRole);
+          c.set('isMasterAccess', userWithRole.role === 'master' || userWithRole.permissions?.includes('*'));
+          return next();
+        } else {
+          // Fallback para dados básicos se não conseguir buscar role
+          c.set('user', sessionUser);
+          c.set('isMasterAccess', sessionUser.role === 'master' || sessionUser.permissions?.includes('*'));
+          return next();
+        }
       }
     } catch (sessionError) {
       // Silencia erros de validação de sessão

@@ -4,6 +4,7 @@ import { ContentParser } from './ContentParser';
 import { TheNewsContentParser, IndividualNews } from './TheNewsContentParser';
 import { extrairNoticiasNewsletter, type NewsletterData, type Noticia } from './NewsletterParser';
 import { generateId } from '../lib/cuid';
+import { NotificationService } from './NotificationService';
 
 // Types based on BeehIV API response
 export interface BeehiivPostResponse {
@@ -69,6 +70,7 @@ export class BeehiivService {
   private categoryRepository: CategoryRepository;
   private contentParser: ContentParser;
   private theNewsParser: TheNewsContentParser;
+  private notificationService: NotificationService;
   private baseUrl = 'https://api.beehiiv.com/v2';
   private env: any;
 
@@ -78,6 +80,7 @@ export class BeehiivService {
     this.categoryRepository = new CategoryRepository(db);
     this.contentParser = new ContentParser();
     this.theNewsParser = new TheNewsContentParser();
+    this.notificationService = new NotificationService(db);
     this.env = env;
   }
 
@@ -1130,6 +1133,18 @@ export class BeehiivService {
       }
 
       console.log(`✅ Successfully converted ${articles.length}/${parserResult.noticias.length} news items to articles`);
+
+      // Enviar notificação de sincronização BeehIV
+      if (articles.length > 0) {
+        try {
+          await this.notificationService.notifyBeehiivSync(articles.length, publicationName || 'BeehIV');
+          console.log(`📧 Notification sent: ${articles.length} articles synced from ${publicationName}`);
+        } catch (notificationError) {
+          console.error('❌ Error sending BeehIV sync notification:', notificationError);
+          // Não falhar a sincronização por causa da notificação
+        }
+      }
+
       return articles;
 
     } catch (error) {
@@ -1233,6 +1248,15 @@ export class BeehiivService {
       // Create or update article in database using upsert
       const article = await this.articleRepository.upsert(articleData);
       console.log(`✅ Article upserted successfully: ${article.id}`);
+
+      // Enviar notificação de novo artigo
+      try {
+        await this.notificationService.notifyNewArticle(article);
+        console.log(`📧 Notification sent: New article created from BeehIV`);
+      } catch (notificationError) {
+        console.error('❌ Error sending new article notification:', notificationError);
+        // Não falhar a criação por causa da notificação
+      }
 
       return article;
     } catch (error) {

@@ -769,10 +769,12 @@ export class ArticleRepository extends BaseRepository {
 
     if (filters.search) {
       const searchTerm = `%${filters.search}%`;
+      // Use ILIKE para busca case-insensitive (PostgreSQL)
       conditions.push(
         or(
-          like(articles.title, searchTerm),
-          like(articles.excerpt, searchTerm)
+          sql`${articles.title} ILIKE ${searchTerm}`,
+          sql`${articles.excerpt} ILIKE ${searchTerm}`,
+          sql`${articles.content}::text ILIKE ${searchTerm}`
         )
       );
     }

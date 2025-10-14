@@ -222,17 +222,47 @@ export class WorkflowService {
         // Não falhar a transição por causa do histórico
       }
 
-      // Enviar notificações se necessário
-      if (article.authorId && article.authorId !== userId) {
-        await this.notificationService.notifyArticleStatusChanged(
-          articleId,
-          article.title,
-          currentStatus,
-          toStatus,
-          userName,
-          article.authorId,
-          options.feedback
-        );
+      // Enviar notificações baseadas no status
+      try {
+        switch (toStatus) {
+          case 'review':
+            // Não notificar mudanças de status gerais, apenas eventos específicos
+            break;
+          case 'solicitado_mudancas':
+            await this.notificationService.notifyChangeRequest(
+              updatedArticle,
+              options.feedback || options.reason || 'Mudanças solicitadas',
+              userName
+            );
+            break;
+          case 'approved':
+            await this.notificationService.notifyApproval(updatedArticle, userName);
+            break;
+          case 'published':
+            await this.notificationService.notifyPublication(updatedArticle, userName);
+            break;
+          case 'rejected':
+            await this.notificationService.notifyRejection(
+              updatedArticle,
+              options.reason || 'Artigo rejeitado',
+              userName
+            );
+            break;
+          case 'archived':
+            await this.notificationService.notifyArchive(updatedArticle, userName);
+            break;
+          default:
+            // Notificar mudança de status genérica
+            await this.notificationService.notifyStatusChange(
+              updatedArticle,
+              currentStatus,
+              toStatus,
+              userName
+            );
+        }
+      } catch (notificationError) {
+        console.error('❌ [TRANSITION-STATUS] Erro ao enviar notificação:', notificationError);
+        // Não falhar a transição por causa de notificação
       }
 
       // Article transitioned
@@ -519,13 +549,8 @@ export class WorkflowService {
         reason: `Artigo atribuído a usuário ${assignedToUserId}`,
       });
 
-      // Notificar o usuário atribuído
-      await this.notificationService.notifyArticleAssigned(
-        articleId,
-        article.title,
-        assignedToUserId,
-        assignedByUserName
-      );
+      // TODO: Implementar notificação de atribuição de artigo
+      // await this.notificationService.notifyArticleAssigned(...)
 
       return { success: true, message: 'Artigo atribuído com sucesso' };
     } catch (error) {

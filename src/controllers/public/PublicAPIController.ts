@@ -710,8 +710,8 @@ export class PublicAPIController {
           sortOrder: 'desc' as const,
           filters: {
             status: 'published',
+            search: query,
           },
-          search: query,
         };
 
         const result = await this.articleRepository.list(options);
